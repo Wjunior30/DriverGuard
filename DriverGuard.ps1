@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch)
 
-$AppVersion = '1.1.1'
+$AppVersion = '1.1.2'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $DataDir = Join-Path $env:LOCALAPPDATA 'DriverGuard'
@@ -209,15 +209,15 @@ $Logic = {
         $cands = @{}
         foreach ($d in Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue) {
             if (-not $d.DeviceID -or "$($d.DeviceClass)".ToUpper() -in 'DISPLAY', 'FIRMWARE') { continue }
-            if ("$($d.DriverProviderName)" -match '^Microsoft') { continue }
+            if ("$($d.DriverProviderName)" -match '^Microsoft' -or -not $d.DriverVersion) { continue }
             $hw = Get-CatalogHwId $d.DeviceID
             if (-not $hw -or $cands.ContainsKey($hw)) { continue }
-            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $d.DeviceName; Class = "$($d.DeviceClass)".ToUpper(); Version = $d.DriverVersion }
+            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $d.DeviceName; Class = "$($d.DeviceClass)".ToUpper(); Version = $d.DriverVersion; Date = $d.DriverDate }
         }
         foreach ($p in Get-CimInstance Win32_PnPEntity -Filter 'ConfigManagerErrorCode = 28' -ErrorAction SilentlyContinue) {
             $hw = Get-CatalogHwId $p.PNPDeviceID
             if (-not $hw -or $cands.ContainsKey($hw)) { continue }
-            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $(if ($p.Name) { $p.Name } else { $hw }); Class = "$($p.PNPClass)".ToUpper(); Version = '' }
+            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $(if ($p.Name) { $p.Name } else { $hw }); Class = "$($p.PNPClass)".ToUpper(); Version = ''; Date = $null }
         }
         $i = 0; $n = $cands.Count
         foreach ($c in $cands.Values) {
@@ -231,6 +231,8 @@ $Logic = {
                 if ($r.Products -notmatch [regex]::Escape($os) -or $r.Class -match 'Firmware') { continue }
                 $v = $null; try { $v = [version]$r.Version } catch { }
                 if (-not $v -or ($cur -and $v -le $cur)) { continue }
+                $pub = $null; try { $pub = [datetime]::ParseExact($r.Date, 'M/d/yyyy', [Globalization.CultureInfo]::InvariantCulture) } catch { }
+                if ($c.Date -and $pub -and $pub -le $c.Date) { continue }
                 if (-not $bestV -or $v -gt $bestV) { $best = $r; $bestV = $v }
             }
             if ($best) {
@@ -506,9 +508,34 @@ if (Test-Path $Exe) { try { [void][Reflection.Assembly]::LoadFrom($Exe); $dwmOk 
 if (-not $dwmOk) { Add-Type -Namespace DG -Name Dwm -MemberDefinition '[DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int a, ref int v, int s);' }
 
 $Hex = @{ bad = '#F87171'; warn = '#FBBF24'; ok = '#34D399'; info = '#8B93A1'; ask = '#FF6A55' }
+# (a cor 'ask' segue o tema; é ajustada depois que o tema é carregado)
 $Glyph = @{ bad = [string][char]0xE7BA; warn = [string][char]0xE946; ok = [string][char]0xE73E; info = [string][char]0xE946; ask = [string][char]0xE946 }
 
 function Get-Plural([int]$n, [string]$one, [string]$many) { if ($n -eq 1) { "1 $one" } else { "$n $many" } }
+
+# ---- temas de cores (a base continua escura; muda a cor de destaque e o brilho)
+$Themes = [ordered]@{
+    vermelho = @{ Nome = 'Vermelho'; A1 = '#FF5A45'; A2 = '#D4145A'; Glow = '#FF3B30'; Bg = '#2A1418'; Icon = '#FF6A55' }
+    azul     = @{ Nome = 'Azul';     A1 = '#3B82F6'; A2 = '#4F46E5'; Glow = '#3B82F6'; Bg = '#111A2E'; Icon = '#60A5FA' }
+    verde    = @{ Nome = 'Verde';    A1 = '#22C55E'; A2 = '#0D9488'; Glow = '#10B981'; Bg = '#0E2219'; Icon = '#4ADE80' }
+    roxo     = @{ Nome = 'Roxo';     A1 = '#A855F7'; A2 = '#DB2777'; Glow = '#A855F7'; Bg = '#1E1230'; Icon = '#C084FC' }
+    laranja  = @{ Nome = 'Laranja';  A1 = '#F59E0B'; A2 = '#EA580C'; Glow = '#F59E0B'; Bg = '#2A1D0C'; Icon = '#FBBF24' }
+    ciano    = @{ Nome = 'Ciano';    A1 = '#06B6D4'; A2 = '#2563EB'; Glow = '#06B6D4'; Bg = '#0B1F26'; Icon = '#22D3EE' }
+}
+$SettingsFile = Join-Path $DataDir 'settings.json'
+function Get-Settings {
+    $h = @{ Theme = 'vermelho' }
+    if (Test-Path $SettingsFile) { try { (Get-Content $SettingsFile -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $h[$_.Name] = $_.Value } } catch { } }
+    $h
+}
+function Save-Settings($h) { $h | ConvertTo-Json | Set-Content $SettingsFile -Encoding UTF8 }
+$ThemeKey = (Get-Settings).Theme
+if (-not $Themes.Contains($ThemeKey)) { $ThemeKey = 'vermelho' }
+$Theme = $Themes[$ThemeKey]
+function Use-Theme([string]$x) {
+    $x.Replace('__A1__', $Theme.A1).Replace('__A2__', $Theme.A2).Replace('__GLOW__', $Theme.Glow).Replace('__BGR__', $Theme.Bg).
+      Replace('__ICON__', $Theme.Icon).Replace('__HALO__', '#1A' + $Theme.A1.Substring(1))
+}
 
 $ResXaml = @'
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -519,8 +546,8 @@ $ResXaml = @'
   <SolidColorBrush x:Key="Text" Color="#E8EAED"/>
   <SolidColorBrush x:Key="Dim" Color="#8B93A1"/>
   <LinearGradientBrush x:Key="Accent" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#FF5A45" Offset="0"/>
-    <GradientStop Color="#D4145A" Offset="1"/>
+    <GradientStop Color="__A1__" Offset="0"/>
+    <GradientStop Color="__A2__" Offset="1"/>
   </LinearGradientBrush>
   <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
   <FontFamily x:Key="Display">Segoe UI Variable Display, Segoe UI</FontFamily>
@@ -739,19 +766,27 @@ $MainXaml = @'
     <Grid x:Name="HomeView">
       <Grid.Background>
         <RadialGradientBrush Center="0.5,0.3" GradientOrigin="0.5,0.3" RadiusX="0.6" RadiusY="0.65">
-          <GradientStop Color="#2A1418" Offset="0"/>
+          <GradientStop Color="__BGR__" Offset="0"/>
           <GradientStop Color="#0F1115" Offset="1"/>
         </RadialGradientBrush>
       </Grid.Background>
       <DockPanel>
         <Grid DockPanel.Dock="Bottom" Margin="28,0,28,16">
           <TextBlock x:Name="FooterText" Foreground="{StaticResource Dim}" FontSize="12" VerticalAlignment="Center"/>
-          <Button x:Name="BtnAdvanced" Style="{StaticResource Ghost}" HorizontalAlignment="Right" Content="Modo avançado  →"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnTheme" Style="{StaticResource Ghost}" Margin="0,0,18,0">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE790;" VerticalAlignment="Center" Margin="0,1,7,0"/>
+                <TextBlock Text="Tema"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="BtnAdvanced" Style="{StaticResource Ghost}" Content="Modo avançado  →"/>
+          </StackPanel>
         </Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,30,0,20" Width="720">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-              <TextBlock FontFamily="{StaticResource Icons}" Text="&#xEA18;" FontSize="26" Foreground="#FF6A55" VerticalAlignment="Center" Margin="0,3,10,0"/>
+              <TextBlock FontFamily="{StaticResource Icons}" Text="&#xEA18;" FontSize="26" Foreground="__ICON__" VerticalAlignment="Center" Margin="0,3,10,0"/>
               <TextBlock Text="DriverGuard" FontSize="30" FontWeight="SemiBold" FontFamily="{StaticResource Display}"/>
             </StackPanel>
             <TextBlock Text="Verifica seus drivers e avisa quando algo der errado." Foreground="{StaticResource Dim}" FontSize="14" HorizontalAlignment="Center" Margin="0,6,0,0"/>
@@ -761,9 +796,9 @@ $MainXaml = @'
                 <ControlTemplate TargetType="Button">
                   <Grid x:Name="Root" RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform><ScaleTransform x:Name="Sc" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
-                    <Ellipse Fill="#1AFF5A45" Margin="-18"/>
+                    <Ellipse Fill="__HALO__" Margin="-18"/>
                     <Ellipse Fill="{StaticResource Accent}">
-                      <Ellipse.Effect><DropShadowEffect Color="#FF3B30" BlurRadius="70" ShadowDepth="0" Opacity="0.55"/></Ellipse.Effect>
+                      <Ellipse.Effect><DropShadowEffect Color="__GLOW__" BlurRadius="70" ShadowDepth="0" Opacity="0.55"/></Ellipse.Effect>
                     </Ellipse>
                     <Ellipse Margin="12" Stroke="#40FFFFFF" StrokeThickness="1.5"/>
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -866,6 +901,7 @@ $MainXaml = @'
         <Button x:Name="BtnSites" Content="Sites oficiais  ▾"/>
         <Button x:Name="BtnCsv" Content="Exportar CSV"/>
         <Button x:Name="BtnWatch" Content="Vigia automático"/>
+        <Button x:Name="BtnTheme2" Content="Tema de cores"/>
         <Button x:Name="BtnDb" Style="{StaticResource PillBad}" Content="Remover Driver Booster" Visibility="Collapsed"/>
       </WrapPanel>
       <Popup x:Name="SitesPopup" PlacementTarget="{Binding ElementName=BtnSites}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" VerticalOffset="2">
@@ -1061,7 +1097,11 @@ try {
     } catch { W ('PONTO=falhou: ' + $_.Exception.Message) }
     foreach ($d in Get-ChildItem '__DIR__' -Directory) {
         $o = pnputil /add-driver (Join-Path $d.FullName 'arquivos\*.inf') /subdirs /install 2>&1 | Out-String
-        W ('PACOTE=' + $d.Name + ' RC=' + $LASTEXITCODE)
+        $rc = $LASTEXITCODE
+        W ('PACOTE=' + $d.Name + ' RC=' + $rc)
+        if ($rc -eq 259) {
+            foreach ($m in [regex]::Matches($o, 'oem\d+\.inf')) { pnputil /delete-driver $m.Value 2>&1 | Out-Null; W ('LIMPO=' + $m.Value) }
+        }
     }
 } catch { W ('ERRO=' + $_.Exception.Message) }
 finally { $L | Set-Content '__LOG__' -Encoding UTF8 }
@@ -1075,7 +1115,7 @@ function Expand-Tpl([string]$tpl, [hashtable]$map) {
 $app = [Windows.Application]::Current
 if (-not $app) { $app = New-Object Windows.Application }
 $app.ShutdownMode = 'OnMainWindowClose'
-$app.Resources = [Windows.Markup.XamlReader]::Parse($ResXaml)
+$app.Resources = [Windows.Markup.XamlReader]::Parse((Use-Theme $ResXaml))
 
 $BrushConv = New-Object Windows.Media.BrushConverter
 function Get-Brush([string]$hex) { $BrushConv.ConvertFromString($hex) }
@@ -1086,9 +1126,10 @@ function Set-DarkTitle($w) {
     $c = 0x0015110F; [void][DG.Dwm]::DwmSetWindowAttribute($h, 35, [ref]$c, 4)
 }
 
-$script:Win = [Windows.Markup.XamlReader]::Parse($MainXaml)
+$Hex.ask = $Theme.Icon
+$script:Win = [Windows.Markup.XamlReader]::Parse((Use-Theme $MainXaml))
 $Win = $script:Win
-foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'FooterText', 'BigBtn', 'Spinner', 'SpinRot', 'BigIcon', 'BigLabel', 'VerdictBadge',
+foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'BtnTheme', 'BtnTheme2', 'FooterText', 'BigBtn', 'Spinner', 'SpinRot', 'BigIcon', 'BigLabel', 'VerdictBadge',
     'VerdictIcon', 'VerdictText', 'VerdictSub', 'Findings', 'BtnBack', 'GpuText', 'HealthText', 'BtnScan', 'BtnUpd', 'BtnGood',
     'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
     'SitesList', 'SearchBox', 'ChkMs', 'DriverGrid', 'StatusText') {
@@ -1888,6 +1929,7 @@ function Start-UpdateInstall($list) {
                 [void](Show-Dialog 'Atualização cancelada' "O Windows não deu permissão de administrador, então nada foi instalado.`n`n$err" 'warn')
                 Update-Home; return
             }
+            $script:UpdLog = $log
             $script:AfterUpdate = $script:UpdList
             Start-Scan
         }
@@ -1902,6 +1944,12 @@ function Show-UpdateResult($rows) {
         if ($rows | Where-Object { $_.Dispositivo -eq $u.Dispositivo -and $_.Versao -eq $u.Nova }) { $okN += $u.Dispositivo } else { $keep += $u.Dispositivo }
     }
     Remove-Item $script:UpdDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $okN.Count -and $script:UpdLog -match 'RC=259' -and $script:UpdLog -notmatch 'RC=(?!259)\d+') {
+        Remove-Item $script:UpdDir -Recurse -Force -ErrorAction SilentlyContinue
+        [void](Show-Dialog 'Seus drivers já eram os melhores' "O Windows comparou e manteve os drivers que você já tinha, porque eles são mais recentes que os do catálogo. Nada foi trocado e não precisa reiniciar.`n`nOs pacotes baixados foram removidos." 'ok')
+        $script:Updates = @(); Start-UpdateCheck
+        return
+    }
     $txt = if ($okN.Count) { "Atualizados:`n•   " + ($okN -join "`n•   ") } else { 'Nenhum driver mudou de versão.' }
     if ($keep.Count) { $txt += "`n`nSem mudança por enquanto (o Windows pode aplicar depois de reiniciar, ou manteve a versão atual por ser a mais adequada):`n•   " + ($keep -join "`n•   ") }
     $txt += "`n`nReinicie o PC para concluir. Se algo der errado, use o ponto de restauração criado agora.$($script:UpdFailTxt)"
@@ -1952,6 +2000,57 @@ if (`$want -ne `$got) { Remove-Item '$($script:AppSetup)' -Force; throw 'o arqui
         Start-Process $script:AppSetup -ArgumentList '/silent'
         $app.Shutdown()
     }
+}
+
+# ---------------------------------------------------------------- temas de cores
+
+$ThemeXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
+        FontFamily="Segoe UI Variable Text, Segoe UI" Foreground="{StaticResource Text}">
+  <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="16" Padding="24,22" Margin="20">
+    <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="0" Opacity="0.6"/></Border.Effect>
+    <StackPanel>
+      <TextBlock Text="Tema de cores" FontSize="18" FontWeight="SemiBold" FontFamily="{StaticResource Display}"/>
+      <TextBlock Text="Escolha a cor do DriverGuard. O app reabre em um segundo com a cor nova." Foreground="{StaticResource Dim}" Margin="0,6,0,18"/>
+      <WrapPanel x:Name="Swatches" Width="444"/>
+      <Button x:Name="Close" Style="{StaticResource Pill}" Content="Fechar" HorizontalAlignment="Right" Margin="0,12,0,0" IsCancel="True"/>
+    </StackPanel>
+  </Border>
+</Window>
+'@
+
+function Show-ThemePicker {
+    $w = [Windows.Markup.XamlReader]::Parse($ThemeXaml)
+    $panel = $w.FindName('Swatches')
+    foreach ($k in $Themes.Keys) {
+        $t = $Themes[$k]
+        $card = New-Object Windows.Controls.Border
+        $card.Width = 136; $card.Margin = '0,0,12,12'; $card.Padding = '10,14'; $card.CornerRadius = 12; $card.Cursor = 'Hand'
+        $card.Background = Get-Brush '#1F232C'; $card.BorderThickness = 2; $card.Tag = $k
+        $card.BorderBrush = Get-Brush $(if ($k -eq $ThemeKey) { $t.A1 } else { '#2A2F3A' })
+        $sp = New-Object Windows.Controls.StackPanel
+        $el = New-Object Windows.Shapes.Ellipse
+        $el.Width = 48; $el.Height = 48; $el.Margin = '0,0,0,8'
+        $el.Fill = New-Object Windows.Media.LinearGradientBrush(([Windows.Media.ColorConverter]::ConvertFromString($t.A1)), ([Windows.Media.ColorConverter]::ConvertFromString($t.A2)), 45)
+        $tb = New-Object Windows.Controls.TextBlock
+        $tb.Text = $(if ($k -eq $ThemeKey) { "$($t.Nome)  ✓" } else { $t.Nome }); $tb.HorizontalAlignment = 'Center'; $tb.FontSize = 13
+        [void]$sp.Children.Add($el); [void]$sp.Children.Add($tb)
+        $card.Child = $sp
+        $card.add_MouseLeftButtonUp({ param($s, $e)
+            [Windows.Window]::GetWindow($s).Close()
+            if ($s.Tag -eq $ThemeKey) { return }
+            $st = Get-Settings; $st.Theme = $s.Tag; Save-Settings $st
+            Start-Launcher ''
+            $app.Shutdown()
+        })
+        [void]$panel.Children.Add($card)
+    }
+    $w.FindName('Close').add_Click({ param($s, $e) [Windows.Window]::GetWindow($s).Close() })
+    $w.add_MouseLeftButtonDown({ param($s, $e) try { $s.DragMove() } catch { } })
+    $w.Owner = $script:Win
+    [void]$w.ShowDialog()
 }
 
 function Act-History {
@@ -2029,6 +2128,8 @@ function Act-RemoveDb {
 
 $BigBtn.add_Click({ Start-Scan })
 $BtnAdvanced.add_Click({ Show-View $true })
+$BtnTheme.add_Click({ Show-ThemePicker })
+$BtnTheme2.add_Click({ Show-ThemePicker })
 $BtnBack.add_Click({ Show-View $false })
 $BtnScan.add_Click({ Start-Scan })
 $BtnGood.add_Click({ Act-MarkGood })
