@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch)
 
-$AppVersion = '1.1.0'
+$AppVersion = '1.1.1'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $DataDir = Join-Path $env:LOCALAPPDATA 'DriverGuard'
@@ -1935,7 +1935,9 @@ function Act-AppUpdate {
     $code = @"
 `$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
 Invoke-WebRequest -UseBasicParsing -Uri '$($u.Url)' -OutFile '$($script:AppSetup)' -TimeoutSec 300
-`$want = ((Invoke-WebRequest -UseBasicParsing -Uri '$($u.ShaUrl)' -TimeoutSec 60).Content -split '\s+')[0].Trim().ToLower()
+`$raw = (Invoke-WebRequest -UseBasicParsing -Uri '$($u.ShaUrl)' -TimeoutSec 60).Content
+if (`$raw -is [byte[]]) { `$raw = [Text.Encoding]::ASCII.GetString(`$raw) }   # o GitHub entrega como binário
+`$want = (`$raw -split '\s+')[0].Trim().ToLower()
 `$got = (Get-FileHash '$($script:AppSetup)' -Algorithm SHA256).Hash.ToLower()
 if (`$want -ne `$got) { Remove-Item '$($script:AppSetup)' -Force; throw 'o arquivo baixado não confere (hash diferente)' }
 'ok'
