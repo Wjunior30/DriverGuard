@@ -1,0 +1,4 @@
+# gerados pelo build.ps1
+dist/
+DriverGuard.exe
+DriverGuard.ico
