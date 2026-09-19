@@ -168,6 +168,67 @@ $Logic = {
         @($byName.Values)
     }
 
+    # ---- atualizações pelo Catálogo oficial do Microsoft Update (drivers certificados pela Microsoft)
+    function Get-CatalogHwId([string]$id) {
+        if ($id -match '^(PCI\\VEN_[0-9A-F]{4}&DEV_[0-9A-F]{4})') { return $matches[1] }
+        if ($id -match '^((USB|HID)\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4})') { return $matches[1] }
+        if ($id -match '^(HID\\VEN_[A-Z0-9]+&DEV_[0-9A-F]{4})') { return $matches[1] }
+        if ($id -match '^(ACPI\\[A-Z0-9]{4,8})\\') { return $matches[1] }
+        $null
+    }
+
+    function Search-Catalog([string]$q) {
+        $r = Invoke-WebRequest -UseBasicParsing -Uri ('https://www.catalog.update.microsoft.com/Search.aspx?q=' + [uri]::EscapeDataString($q)) -TimeoutSec 60
+        foreach ($m in [regex]::Matches($r.Content, '<tr id="([0-9a-f\-]{36})_R\d+"[\s\S]*?</tr>')) {
+            $c = @([regex]::Matches($m.Value, '<td[^>]*>([\s\S]*?)</td>') | ForEach-Object { ($_.Groups[1].Value -replace '<[^>]+>', ' ' -replace '\s+', ' ').Trim() })
+            if ($c.Count -lt 7) { continue }
+            [pscustomobject]@{ Id = $m.Groups[1].Value; Title = $c[1]; Products = $c[2]; Class = $c[3]; Date = $c[4]; Version = $c[5]; Size = ([regex]::Match($c[6], '[\d\.,]+ [KMG]B')).Value }
+        }
+    }
+
+    # Para cada dispositivo com driver de fabricante (ou sem driver), procura versão MAIS NOVA no catálogo.
+    # Vídeo e firmware ficam de fora de propósito.
+    function Get-DriverUpdates {
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+        $os = if ([Environment]::OSVersion.Version.Build -ge 22000) { 'Windows 11' } else { 'Windows 10' }
+        $cands = @{}
+        foreach ($d in Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue) {
+            if (-not $d.DeviceID -or "$($d.DeviceClass)".ToUpper() -in 'DISPLAY', 'FIRMWARE') { continue }
+            if ("$($d.DriverProviderName)" -match '^Microsoft') { continue }
+            $hw = Get-CatalogHwId $d.DeviceID
+            if (-not $hw -or $cands.ContainsKey($hw)) { continue }
+            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $d.DeviceName; Class = "$($d.DeviceClass)".ToUpper(); Version = $d.DriverVersion }
+        }
+        foreach ($p in Get-CimInstance Win32_PnPEntity -Filter 'ConfigManagerErrorCode = 28' -ErrorAction SilentlyContinue) {
+            $hw = Get-CatalogHwId $p.PNPDeviceID
+            if (-not $hw -or $cands.ContainsKey($hw)) { continue }
+            $cands[$hw] = [pscustomobject]@{ Hw = $hw; Name = $(if ($p.Name) { $p.Name } else { $hw }); Class = "$($p.PNPClass)".ToUpper(); Version = '' }
+        }
+        $i = 0; $n = $cands.Count
+        foreach ($c in $cands.Values) {
+            $i++
+            if ($Prog) { $Prog.Text = "Verificando $i de ${n}: $($c.Name)" }
+            $rows = @()
+            try { $rows = @(Search-Catalog $c.Hw) } catch { continue }
+            $cur = $null; try { $cur = [version]$c.Version } catch { }
+            $best = $null; $bestV = $null
+            foreach ($r in $rows) {
+                if ($r.Products -notmatch [regex]::Escape($os) -or $r.Class -match 'Firmware') { continue }
+                $v = $null; try { $v = [version]$r.Version } catch { }
+                if (-not $v -or ($cur -and $v -le $cur)) { continue }
+                if (-not $bestV -or $v -gt $bestV) { $best = $r; $bestV = $v }
+            }
+            if ($best) {
+                [pscustomobject]@{
+                    Id = $best.Id; Dispositivo = $c.Name; Classe = $c.Class
+                    Atual = $(if ($c.Version) { $c.Version } else { 'sem driver' })
+                    Nova = $best.Version; Data = $best.Date; Tamanho = $best.Size; Titulo = $best.Title; Hw = $c.Hw
+                }
+            }
+        }
+    }
+
     function Find-DriverBooster {
         $found = @()
         foreach ($root in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -300,9 +361,19 @@ function Stop-Tray {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+function Get-State {
+    $s = $null
+    if (Test-Path $WatchState) { try { $s = Get-Content $WatchState -Raw | ConvertFrom-Json } catch { } }
+    $h = @{ LastCheck = $null; LastUpd = $null; UpdKey = '' }
+    if ($s) { foreach ($p in $s.PSObject.Properties) { $h[$p.Name] = $p.Value } }
+    $h
+}
+function Save-State($h) { $h | ConvertTo-Json | Set-Content $WatchState -Encoding UTF8 }
+
 function Get-WatchIssues {
+    $st = Get-State
     $last = $null
-    if (Test-Path $WatchState) { try { $last = [datetime](Get-Content $WatchState -Raw | ConvertFrom-Json).LastCheck } catch { } }
+    if ($st.LastCheck) { try { $last = [datetime]$st.LastCheck } catch { } }
     $issues = @()
     $g = Get-GpuInfo; $b = Get-Baseline
     if ($g -and $g.Code -ne 0) { $issues += 'Placa de vídeo com erro ({0}) — jogos não vão abrir.' -f (Get-ProblemText $g.Code) }
@@ -315,7 +386,7 @@ function Get-WatchIssues {
         if ($new.Count) { $issues += 'O PC caiu {0}x desde a última verificação (última {1:dd/MM HH:mm}).' -f $new.Count, $new[0].Quando }
     }
     if ((Find-DriverBooster).Count) { $issues += 'Driver Booster instalado.' }
-    @{ LastCheck = (Get-Date).ToString('o') } | ConvertTo-Json | Set-Content $WatchState -Encoding UTF8
+    $st = Get-State; $st.LastCheck = (Get-Date).ToString('o'); Save-State $st
     $issues
 }
 
@@ -344,6 +415,23 @@ if ($Watch) {
     $script:LastIssues = ''
 
     function Invoke-WatchCheck([bool]$manual) {
+        $updLine = ''
+        $st = Get-State
+        $lastU = $null; if ($st.LastUpd) { try { $lastU = [datetime]$st.LastUpd } catch { } }
+        if ($manual -or -not $lastU -or ((Get-Date) - $lastU).TotalHours -ge 24) {
+            $online = $true
+            try { $null = Invoke-WebRequest -UseBasicParsing -Method Head -Uri 'https://www.catalog.update.microsoft.com/' -TimeoutSec 15 } catch { $online = $false }
+            if ($online) {
+                $ups = @(); try { $ups = @(Get-DriverUpdates) } catch { }
+                $key = @($ups | ForEach-Object Id) -join '|'
+                $st = Get-State
+                $isNew = $key -and $key -ne $st.UpdKey
+                $st.LastUpd = (Get-Date).ToString('o'); $st.UpdKey = $key; Save-State $st
+                if ($ups.Count -and ($isNew -or $manual)) {
+                    $updLine = $(if ($ups.Count -eq 1) { '1 atualização de driver oficial disponível.' } else { "$($ups.Count) atualizações de driver oficiais disponíveis." })
+                }
+            }
+        }
         $issues = @(Get-WatchIssues)
         if ($issues.Count) {
             $ni.Icon = $icoBad
@@ -351,8 +439,10 @@ if ($Watch) {
         } else { $ni.Icon = $icoOk; $ni.Text = 'DriverGuard — tudo certo' }
         $key = $issues -join '|'
         if ($issues.Count -and ($manual -or $key -ne $script:LastIssues)) {
-            $txt = $issues -join "`n"
+            $txt = (@($issues) + @($updLine | Where-Object { $_ })) -join "`n"
             $ni.ShowBalloonTip(20000, 'DriverGuard — atenção', $txt.Substring(0, [Math]::Min(250, $txt.Length)), 'Warning')
+        } elseif ($updLine) {
+            $ni.ShowBalloonTip(15000, 'DriverGuard', "$updLine Clique para abrir e atualizar.", 'Info')
         } elseif ($manual) {
             $ni.ShowBalloonTip(8000, 'DriverGuard', 'Tudo certo com seus drivers.', 'Info')
         }
@@ -747,6 +837,7 @@ $MainXaml = @'
           <Style TargetType="Button" BasedOn="{StaticResource Pill}"/>
         </WrapPanel.Resources>
         <Button x:Name="BtnScan" Style="{StaticResource PillAccent}" Content="Escanear"/>
+        <Button x:Name="BtnUpd" Content="Atualizar drivers"/>
         <Button x:Name="BtnGood" Content="Salvar e fazer backup do vídeo"/>
         <Button x:Name="BtnRestore" Content="Restaurar driver salvo"/>
         <Button x:Name="BtnPoint" Content="Criar ponto de restauração"/>
@@ -906,6 +997,58 @@ if ($rc -lt 8) {
 $rc
 '@
 
+$DlTpl = @'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+$items = @(ConvertFrom-Json '__JSON__' | ForEach-Object { $_ })   # PS 5 devolve a lista inteira como um item só
+$ok = @(); $fail = @(); $i = 0
+foreach ($u in $items) {
+    $i++
+    if ($Prog) { $Prog.Text = "Baixando $i de $($items.Count): $($u.Dispositivo)" }
+    $dir = Join-Path '__DIR__' $u.Id
+    try {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $post = 'updateIDs=' + [uri]::EscapeDataString('[{"size":0,"languages":"","uidInfo":"' + $u.Id + '","updateID":"' + $u.Id + '"}]')
+        $d = Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'https://www.catalog.update.microsoft.com/DownloadDialog.aspx' -Body $post -ContentType 'application/x-www-form-urlencoded' -TimeoutSec 60
+        $urls = @([regex]::Matches($d.Content, "downloadInformation\[\d+\]\.files\[\d+\]\.url\s*=\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -like '*.cab' })
+        if (-not $urls.Count) { throw 'link de download não encontrado' }
+        $x = Join-Path $dir 'arquivos'
+        New-Item -ItemType Directory -Force -Path $x | Out-Null
+        foreach ($url in $urls) {
+            if ($url -notmatch '^https?://[^/]*\.(windowsupdate|microsoft)\.com/') { throw 'link fora dos servidores da Microsoft' }
+            $cab = Join-Path $dir ([IO.Path]::GetFileName(([uri]$url).AbsolutePath))
+            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $cab -TimeoutSec 900
+            $sig = Get-AuthenticodeSignature $cab
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'assinatura digital da Microsoft inválida' }
+            & expand.exe -F:* $cab $x | Out-Null
+            Remove-Item $cab -Force
+        }
+        if (-not (Get-ChildItem $x -Recurse -Filter '*.inf')) { throw 'pacote sem arquivo .inf' }
+        $ok += $u.Id
+    } catch {
+        $fail += ('{0}: {1}' -f $u.Dispositivo, $_.Exception.Message)
+        Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+[pscustomobject]@{ Ok = @($ok); Fail = @($fail) }
+'@
+
+$UpdTpl = @'
+$L = New-Object Collections.ArrayList
+function W([string]$t) { [void]$L.Add($t) }
+try {
+    try {
+        Checkpoint-Computer -Description 'DriverGuard - antes de atualizar drivers' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop -WarningAction SilentlyContinue -WarningVariable wv
+        if ($wv) { W ('PONTO=aviso: ' + $wv[0]) } else { W 'PONTO=ok' }
+    } catch { W ('PONTO=falhou: ' + $_.Exception.Message) }
+    foreach ($d in Get-ChildItem '__DIR__' -Directory) {
+        $o = pnputil /add-driver (Join-Path $d.FullName 'arquivos\*.inf') /subdirs /install 2>&1 | Out-String
+        W ('PACOTE=' + $d.Name + ' RC=' + $LASTEXITCODE)
+    }
+} catch { W ('ERRO=' + $_.Exception.Message) }
+finally { $L | Set-Content '__LOG__' -Encoding UTF8 }
+'@
+
 function Expand-Tpl([string]$tpl, [hashtable]$map) {
     foreach ($k in $map.Keys) { $tpl = $tpl.Replace($k, "$($map[$k])".Replace("'", "''")) }
     $tpl
@@ -928,7 +1071,7 @@ function Set-DarkTitle($w) {
 $script:Win = [Windows.Markup.XamlReader]::Parse($MainXaml)
 $Win = $script:Win
 foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'FooterText', 'BigBtn', 'Spinner', 'SpinRot', 'BigIcon', 'BigLabel', 'VerdictBadge',
-    'VerdictIcon', 'VerdictText', 'VerdictSub', 'Findings', 'BtnBack', 'GpuText', 'HealthText', 'BtnScan', 'BtnGood',
+    'VerdictIcon', 'VerdictText', 'VerdictSub', 'Findings', 'BtnBack', 'GpuText', 'HealthText', 'BtnScan', 'BtnUpd', 'BtnGood',
     'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
     'SitesList', 'SearchBox', 'ChkMs', 'DriverGrid', 'StatusText') {
     Set-Variable -Name $n -Value $Win.FindName($n) -Scope Script
@@ -986,21 +1129,26 @@ function Show-TableWindow([string]$title, $rows, [string]$note) {
 $script:Tasks = New-Object Collections.ArrayList
 $BgTimer = New-Object Windows.Threading.DispatcherTimer
 $BgTimer.Interval = [TimeSpan]::FromMilliseconds(150)
+$script:Prog = [hashtable]::Synchronized(@{ Text = '' })
+$script:ProgRun = $null
 $BgTimer.add_Tick({
+    if ($script:ProgRun -and $script:Prog.Text -and $script:ProgRun.Text -ne $script:Prog.Text) { $script:ProgRun.Text = $script:Prog.Text }
     foreach ($t in @($script:Tasks)) {
         if (-not $t.Handle.IsCompleted) { continue }
         $script:Tasks.Remove($t)
         $out = $null; $err = $null
         try { $out = $t.Ps.EndInvoke($t.Handle) }
         catch { $err = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message } }
-        $t.Ps.Dispose()
+        $t.Ps.Dispose(); $t.Rs.Dispose()
         & $t.Done $out $err
     }
     if (-not $script:Tasks.Count) { $BgTimer.Stop() }
 })
 function Start-Bg([string]$code, [scriptblock]$onDone) {
-    $ps = [PowerShell]::Create(); [void]$ps.AddScript($code)
-    [void]$script:Tasks.Add(@{ Ps = $ps; Handle = $ps.BeginInvoke(); Done = $onDone })
+    $rs = [runspacefactory]::CreateRunspace(); $rs.Open()
+    $rs.SessionStateProxy.SetVariable('Prog', $script:Prog)
+    $ps = [PowerShell]::Create(); $ps.Runspace = $rs; [void]$ps.AddScript($code)
+    [void]$script:Tasks.Add(@{ Ps = $ps; Rs = $rs; Handle = $ps.BeginInvoke(); Done = $onDone })
     $BgTimer.Start()
 }
 
@@ -1239,6 +1387,7 @@ function Add-Finding([string]$text, [string]$desc, [string]$kind, [string]$btnTe
         $tb.Inlines.Add((New-Object Windows.Documents.LineBreak))
         $t2 = New-Object Windows.Documents.Run($desc); $t2.FontSize = 12.5; $t2.Foreground = Get-Brush '#9AA2AF'
         $tb.Inlines.Add($t2); $tb.LineHeight = 20
+        $script:LastDescRun = $t2
     }
     [Windows.Controls.Grid]::SetColumn($tb, 1)
     [void]$grid.Children.Add($badge); [void]$grid.Children.Add($tb)
@@ -1310,6 +1459,28 @@ function Update-Home {
         $bad++
         Add-Finding ((Get-Plural $script:Problems 'dispositivo com problema' 'dispositivos com problema') + ' no driver') 'Algum componente do PC está sem driver ou com erro e pode não funcionar direito. Veja qual no modo avançado.' 'bad' 'Ver' { Show-View $true }
     }
+    $script:ProgRun = $null
+    switch ($script:UpdState) {
+        'checking' {
+            Add-Finding 'Procurando atualizações de driver...' $script:Prog.Text 'info' $null $null
+            $script:ProgRun = $script:LastDescRun
+        }
+        'installing' {
+            Add-Finding 'Atualizando drivers...' $script:Prog.Text 'info' $null $null
+            $script:ProgRun = $script:LastDescRun
+        }
+        'error' {
+            Add-Finding 'Não foi possível buscar atualizações' 'Sem internet ou o catálogo da Microsoft não respondeu. Tente de novo mais tarde.' 'info' 'Tentar de novo' { Start-UpdateCheck }
+        }
+        'done' {
+            if ($script:Updates.Count) {
+                $tips++
+                $names = (@($script:Updates | Select-Object -First 3 | ForEach-Object Dispositivo) -join ', ')
+                if ($script:Updates.Count -gt 3) { $names += '...' }
+                Add-Finding ((Get-Plural $script:Updates.Count 'driver tem versão nova' 'drivers têm versão nova') + ' oficial') "Versões mais novas certificadas pela Microsoft: $names. Antes de instalar é criado um ponto de restauração." 'warn' 'Atualizar' { Show-UpdatesWindow }
+            }
+        }
+    }
     if ($script:BackupBusy) {
         Add-Finding 'Fazendo backup do driver de vídeo...' 'Copiando o driver atual para você poder restaurar com um clique no futuro. Pode continuar usando o PC.' 'info' $null $null
     } elseif ($g -and $g.Code -eq 0 -and -not $b) {
@@ -1332,6 +1503,7 @@ function Update-Home {
     }
 
     $sub = 'Última análise às {0:HH:mm}' -f $script:LastScan
+    if ($script:UpdState -eq 'done' -and -not $script:Updates.Count) { $sub += '  •  drivers em dia' }
     if ($bad) { Set-Verdict 'bad' (Get-Plural $bad 'problema encontrado' 'problemas encontrados') $sub }
     elseif ($tips) { Set-Verdict 'ok' 'Tudo certo' ('{0}  •  {1} para ficar mais protegido' -f $sub, (Get-Plural $tips 'sugestão' 'sugestões')) }
     else { Set-Verdict 'ok' 'Tudo certo — seu PC está protegido' $sub }
@@ -1361,6 +1533,8 @@ function Apply-Scan($r) {
     $dt.EndLoadData()
     $script:LastScan = Get-Date
     Update-Cards; Update-Filter; Update-Home; Update-Sites
+    if ($script:AfterUpdate) { Show-UpdateResult $rows }
+    elseif ($script:UpdState -in 'idle', 'error') { Start-UpdateCheck }
     if ($script:AfterRestore) {
         $want = $script:AfterRestore; $script:AfterRestore = $null
         $g = $script:Gpu
@@ -1573,6 +1747,144 @@ function Act-AllBackup {
     }
 }
 
+# ---------------------------------------------------------------- atualização de drivers (Catálogo do Microsoft Update)
+
+$UpdXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Atualizações de driver" Width="980" Height="520" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13">
+  <Grid Margin="22,18,22,18">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <TextBlock x:Name="Head" FontSize="19" FontWeight="SemiBold" FontFamily="{StaticResource Display}"/>
+    <TextBlock Grid.Row="1" Foreground="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,6,0,0"
+               Text="Drivers certificados pela Microsoft, baixados do servidor oficial do Windows Update. Antes de instalar é criado um ponto de restauração. O driver de vídeo e o firmware (BIOS) não entram aqui de propósito."/>
+    <Border Grid.Row="2" Margin="0,14,0,14" Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="4">
+      <DataGrid x:Name="G" AutoGenerateColumns="False" IsReadOnly="False">
+        <DataGrid.Columns>
+          <DataGridTemplateColumn Header="" Width="46">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate><CheckBox IsChecked="{Binding Instalar, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center"/></DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="Dispositivo" Binding="{Binding Dispositivo}" Width="*" IsReadOnly="True"/>
+          <DataGridTextColumn Header="Versão atual" Binding="{Binding Atual}" Width="140" IsReadOnly="True"/>
+          <DataGridTextColumn Header="Nova versão" Binding="{Binding Nova}" Width="140" IsReadOnly="True"/>
+          <DataGridTextColumn Header="Data" Binding="{Binding Data}" Width="95" IsReadOnly="True"/>
+          <DataGridTextColumn Header="Tamanho" Binding="{Binding Tamanho}" Width="85" IsReadOnly="True"/>
+        </DataGrid.Columns>
+      </DataGrid>
+    </Border>
+    <DockPanel Grid.Row="3">
+      <Button x:Name="Install" DockPanel.Dock="Right" Style="{StaticResource PillAccent}" Content="Instalar selecionados" Margin="10,0,0,0"/>
+      <Button x:Name="Close" DockPanel.Dock="Right" Style="{StaticResource Pill}" Content="Agora não" Margin="0" IsCancel="True"/>
+      <TextBlock x:Name="Note" Foreground="{StaticResource Dim}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+    </DockPanel>
+  </Grid>
+</Window>
+'@
+
+$script:UpdState = 'idle'; $script:Updates = @(); $script:AfterUpdate = $null
+
+function Start-UpdateCheck {
+    if ($script:UpdState -in 'checking', 'installing') { return }
+    $script:UpdState = 'checking'; $script:Prog.Text = 'Consultando o Catálogo do Microsoft Update...'
+    $BtnUpd.IsEnabled = $false; $BtnUpd.Content = 'Procurando atualizações...'
+    Update-Home
+    Start-Bg ($LogicText + "`nGet-DriverUpdates") {
+        param($out, $err)
+        $BtnUpd.IsEnabled = $true; $BtnUpd.Content = 'Atualizar drivers'
+        $script:Updates = @($out | Where-Object { $_ })
+        $script:UpdState = if ($err -and -not $script:Updates.Count) { 'error' } else { 'done' }
+        $st = Get-State; $st.LastUpd = (Get-Date).ToString('o'); $st.UpdKey = (@($script:Updates.Id) -join '|'); Save-State $st
+        Update-Home
+    }
+}
+
+function Act-Updates {
+    if ($script:UpdState -eq 'checking') { return }
+    if ($script:UpdState -ne 'done') { Start-UpdateCheck; return }
+    Show-UpdatesWindow
+}
+
+function Show-UpdatesWindow {
+    $ups = @($script:Updates)
+    if (-not $ups.Count) { [void](Show-Dialog 'Drivers em dia' 'Não há versões mais novas no Catálogo do Microsoft Update para os drivers deste PC.' 'ok'); return }
+    $w = [Windows.Markup.XamlReader]::Parse($UpdXaml)
+    $w.FindName('Head').Text = (Get-Plural $ups.Count 'atualização de driver disponível' 'atualizações de driver disponíveis')
+    $t = New-Object Data.DataTable
+    [void]$t.Columns.Add('Instalar', [bool])
+    foreach ($n in 'Dispositivo', 'Atual', 'Nova', 'Data', 'Tamanho', 'Id') { [void]$t.Columns.Add($n) }
+    foreach ($u in $ups) { [void]$t.Rows.Add($true, $u.Dispositivo, $u.Atual, $u.Nova, $u.Data, $u.Tamanho, $u.Id) }
+    $w.FindName('G').ItemsSource = $t.DefaultView
+    $w.FindName('Note').Text = 'Desmarque o que não quiser atualizar.'
+    $w.FindName('Install').add_Click({ param($s, $e) [Windows.Window]::GetWindow($s).DialogResult = $true })
+    $w.FindName('Close').add_Click({ param($s, $e) [Windows.Window]::GetWindow($s).Close() })
+    $w.add_SourceInitialized({ param($s, $e) Set-DarkTitle $s })
+    $w.Owner = $script:Win
+    if (-not $w.ShowDialog()) { return }
+    foreach ($v in $t.DefaultView) { $v.EndEdit() }
+    $ids = @($t.Rows | Where-Object { $_['Instalar'] } | ForEach-Object { $_['Id'] })
+    if (-not $ids.Count) { return }
+    Start-UpdateInstall @($ups | Where-Object { $_.Id -in $ids })
+}
+
+function Start-UpdateInstall($list) {
+    $mb = 0; foreach ($u in $list) { if ($u.Tamanho -match '([\d\.,]+) ([KMG])B') { $v = [double]($matches[1] -replace ',', '.'); $mb += switch ($matches[2]) { 'K' { $v / 1024 } 'G' { $v * 1024 } default { $v } } } }
+    $msg = "Vou:`n`n1.   Baixar {0} ({1:N0} MB) do servidor oficial da Microsoft e conferir a assinatura digital`n2.   Criar um ponto de restauração do Windows`n3.   Instalar os drivers`n`nO Windows vai pedir permissão de administrador. A tela ou a internet podem piscar por alguns segundos." -f (Get-Plural $list.Count 'driver' 'drivers'), [math]::Max(1, $mb)
+    if (-not (Show-Dialog 'Atualizar drivers' $msg 'ask' -YesNo -YesText 'Atualizar')) { return }
+    $dir = Join-Path $DataDir ('updates\{0:yyyyMMdd-HHmmss}' -f (Get-Date))
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $script:UpdDir = $dir; $script:UpdList = @($list)
+    $script:UpdState = 'installing'; $script:Prog.Text = 'Preparando download...'
+    $BtnUpd.IsEnabled = $false; $BtnUpd.Content = 'Atualizando drivers...'
+    Update-Home
+    $json = ConvertTo-Json -InputObject @($list | Select-Object Id, Dispositivo) -Compress
+    Start-Bg (Expand-Tpl $DlTpl @{ '__JSON__' = $json; '__DIR__' = $dir }) {
+        param($out, $err)
+        $r = if ($out -and $out.Count) { $out[$out.Count - 1] } else { $null }
+        $failTxt = if ($r -and @($r.Fail).Count) { "`n`nNão baixados:`n" + (@($r.Fail) -join "`n") } else { '' }
+        if ($err -or -not $r -or -not @($r.Ok).Count) {
+            $script:UpdState = 'done'; $BtnUpd.IsEnabled = $true; $BtnUpd.Content = 'Atualizar drivers'
+            [void](Show-Dialog 'Download falhou' ("Nenhum driver foi baixado, então nada foi alterado.$failTxt`n$err") 'bad')
+            Update-Home; return
+        }
+        $script:UpdFailTxt = $failTxt
+        $script:Prog.Text = 'Instalando (aceite a permissão de administrador)...'
+        Invoke-Elevated $UpdTpl @{ '__DIR__' = $script:UpdDir } 'atualizar' {
+            param($log, $err)
+            $BtnUpd.IsEnabled = $true; $BtnUpd.Content = 'Atualizar drivers'
+            $script:UpdState = 'done'
+            if ($err) {
+                [void](Show-Dialog 'Atualização cancelada' "O Windows não deu permissão de administrador, então nada foi instalado.`n`n$err" 'warn')
+                Update-Home; return
+            }
+            $script:AfterUpdate = $script:UpdList
+            Start-Scan
+        }
+    }
+}
+
+# Depois de instalar: confere na análise nova quais drivers realmente mudaram de versão.
+function Show-UpdateResult($rows) {
+    $list = $script:AfterUpdate; $script:AfterUpdate = $null
+    $okN = @(); $keep = @()
+    foreach ($u in $list) {
+        if ($rows | Where-Object { $_.Dispositivo -eq $u.Dispositivo -and $_.Versao -eq $u.Nova }) { $okN += $u.Dispositivo } else { $keep += $u.Dispositivo }
+    }
+    Remove-Item $script:UpdDir -Recurse -Force -ErrorAction SilentlyContinue
+    $txt = if ($okN.Count) { "Atualizados:`n•   " + ($okN -join "`n•   ") } else { 'Nenhum driver mudou de versão.' }
+    if ($keep.Count) { $txt += "`n`nSem mudança por enquanto (o Windows pode aplicar depois de reiniciar, ou manteve a versão atual por ser a mais adequada):`n•   " + ($keep -join "`n•   ") }
+    $txt += "`n`nReinicie o PC para concluir. Se algo der errado, use o ponto de restauração criado agora.$($script:UpdFailTxt)"
+    [void](Show-Dialog $(if ($okN.Count) { 'Drivers atualizados' } else { 'Atualização concluída' }) $txt $(if ($okN.Count) { 'ok' } else { 'warn' }))
+    $script:Updates = @()
+    Start-UpdateCheck
+}
+
 function Act-History {
     $rows = @($script:History | ForEach-Object {
         [pscustomobject]@{ Quando = $_.Quando.ToString('dd/MM/yyyy HH:mm'); Origem = $_.Origem; Detalhe = $_.Detalhe; Destaque = ($_.Origem -like 'Driver Booster*') }
@@ -1621,7 +1933,7 @@ function Act-Watch {
         $msg = "Um escudo fica perto do relógio (verde = tudo certo, vermelho = atenção). O DriverGuard confere seu PC ao ligar e a cada hora, e só avisa se:`n`n•   o driver de vídeo foi trocado`n•   a placa de vídeo está com erro`n•   o PC caiu desde a última vez`n•   o Driver Booster voltou`n`nNão instala nada. Dá para desligar quando quiser."
         if (Show-Dialog 'Ligar proteção automática?' $msg 'ask' -YesNo -YesText 'Ligar') {
             Set-WatchEnabled $true
-            @{ LastCheck = (Get-Date).ToString('o') } | ConvertTo-Json | Set-Content $WatchState -Encoding UTF8
+            $st = Get-State; $st.LastCheck = (Get-Date).ToString('o'); Save-State $st
             Start-Launcher '-Watch'
         }
     }
@@ -1651,6 +1963,7 @@ $BtnAdvanced.add_Click({ Show-View $true })
 $BtnBack.add_Click({ Show-View $false })
 $BtnScan.add_Click({ Start-Scan })
 $BtnGood.add_Click({ Act-MarkGood })
+$BtnUpd.add_Click({ Act-Updates })
 $BtnRestore.add_Click({ Act-Restore })
 $BtnPoint.add_Click({ Act-Point })
 $BtnAll.add_Click({ Act-AllBackup })
