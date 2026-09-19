@@ -40,8 +40,18 @@ $bw.Close()
 $app = Join-Path $root 'DriverGuard.ps1'   # PowerShell 5.1 precisa de BOM para ler acentos
 [IO.File]::WriteAllText($app, [IO.File]::ReadAllText($app, [Text.Encoding]::UTF8), (New-Object Text.UTF8Encoding $true))
 
+# versão única: vem do $AppVersion do DriverGuard.ps1
+$ver = ([regex]::Match([IO.File]::ReadAllText($app), "\`$AppVersion = '([\d\.]+)'")).Groups[1].Value
+if (-not $ver) { throw 'Não achei $AppVersion no DriverGuard.ps1' }
+$verCs = "$root\src\Version.g.cs"
+[IO.File]::WriteAllText($verCs, @"
+[assembly: System.Reflection.AssemblyVersion("$ver.0")]
+[assembly: System.Reflection.AssemblyFileVersion("$ver.0")]
+namespace DG { static class Ver { public const string V = "$ver"; } }
+"@)
+
 $refs = '/codepage:65001', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll'
-& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\DriverGuard.exe" @refs "$root\src\Launcher.cs"
+& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\DriverGuard.exe" @refs "$root\src\Launcher.cs" $verCs
 if ($LASTEXITCODE) { throw 'Falha ao compilar DriverGuard.exe' }
 
 Copy-Item "$root\DriverGuard.ps1" $dist -Force
@@ -50,7 +60,12 @@ Copy-Item "$dist\DriverGuard.exe" $root -Force   # para a pasta de desenvolvimen
 
 & $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\DriverGuard-Setup.exe" @refs `
     "/resource:$dist\DriverGuard.ps1,DriverGuard.ps1" "/resource:$dist\DriverGuard.exe,DriverGuard.exe" "/resource:$ico,DriverGuard.ico" `
-    "$root\src\Setup.cs"
+    "$root\src\Setup.cs" $verCs
 if ($LASTEXITCODE) { throw 'Falha ao compilar DriverGuard-Setup.exe' }
+
+# hash para o app conferir o download da atualização
+$hash = (Get-FileHash "$dist\DriverGuard-Setup.exe" -Algorithm SHA256).Hash.ToLower()
+[IO.File]::WriteAllText("$dist\DriverGuard-Setup.exe.sha256", "$hash  DriverGuard-Setup.exe")
+"DriverGuard $ver"
 
 Get-ChildItem $dist | Select-Object Name, @{ n = 'KB'; e = { [math]::Round($_.Length / 1KB) } } | Format-Table -AutoSize

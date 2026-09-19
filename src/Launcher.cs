@@ -10,8 +10,6 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("DriverGuard")]
 [assembly: AssemblyProduct("DriverGuard")]
 [assembly: AssemblyDescription("Protege seus drivers e avisa quando algo der errado")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
 
 namespace DG
 {

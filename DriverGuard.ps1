@@ -1,6 +1,7 @@
 ﻿param([switch]$SelfTest, [switch]$Watch)
 
-$AppVersion = '1.0.0'
+$AppVersion = '1.1.0'
+$UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $DataDir = Join-Path $env:LOCALAPPDATA 'DriverGuard'
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
@@ -166,6 +167,19 @@ $Logic = {
             }
         }
         @($byName.Values)
+    }
+
+    # ---- versão nova do próprio DriverGuard (GitHub Releases)
+    function Get-AppUpdate([string]$repo, [string]$current) {
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+        $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'DriverGuard' } -TimeoutSec 20
+        $v = $null; try { $v = [version](("$($r.tag_name)") -replace '^[vV]', '') } catch { }
+        if (-not $v -or $v -le [version]$current) { return }
+        $exe = @($r.assets | Where-Object { $_.name -eq 'DriverGuard-Setup.exe' })[0]
+        $sha = @($r.assets | Where-Object { $_.name -eq 'DriverGuard-Setup.exe.sha256' })[0]
+        if (-not $exe -or -not $sha) { return }
+        [pscustomobject]@{ Version = "$v"; Url = $exe.browser_download_url; ShaUrl = $sha.browser_download_url; Notes = "$($r.body)".Trim(); SizeMB = [math]::Round($exe.size / 1MB, 1) }
     }
 
     # ---- atualizações pelo Catálogo oficial do Microsoft Update (drivers certificados pela Microsoft)
@@ -364,7 +378,7 @@ function Stop-Tray {
 function Get-State {
     $s = $null
     if (Test-Path $WatchState) { try { $s = Get-Content $WatchState -Raw | ConvertFrom-Json } catch { } }
-    $h = @{ LastCheck = $null; LastUpd = $null; UpdKey = '' }
+    $h = @{ LastCheck = $null; LastUpd = $null; UpdKey = ''; AppKey = '' }
     if ($s) { foreach ($p in $s.PSObject.Properties) { $h[$p.Name] = $p.Value } }
     $h
 }
@@ -430,6 +444,10 @@ if ($Watch) {
                 if ($ups.Count -and ($isNew -or $manual)) {
                     $updLine = $(if ($ups.Count -eq 1) { '1 atualização de driver oficial disponível.' } else { "$($ups.Count) atualizações de driver oficiais disponíveis." })
                 }
+                $au = $null; try { $au = Get-AppUpdate $UpdateRepo $AppVersion } catch { }
+                $st = Get-State
+                if ($au -and ($manual -or $st.AppKey -ne $au.Version)) { $updLine = ("DriverGuard $($au.Version) disponível. " + $updLine).Trim() }
+                $st.AppKey = $(if ($au) { $au.Version } else { '' }); Save-State $st
             }
         }
         $issues = @(Get-WatchIssues)
@@ -1419,6 +1437,13 @@ function Update-Home {
     $bk = if ($b) { Get-Backup $b.Version } else { $null }
     $bad = 0; $tips = 0
 
+    if ($script:AppUpd) {
+        $tips++
+        $notes = ($script:AppUpd.Notes -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 2) -join ' '
+        if ($notes.Length -gt 160) { $notes = $notes.Substring(0, 160) + '...' }
+        if ($notes) { $notes += ' ' }
+        Add-Finding "Nova versão do DriverGuard: $($script:AppUpd.Version)" ($notes + "Atualiza em segundos ($($script:AppUpd.SizeMB) MB) e mantém seu backup e suas configurações.") 'warn' 'Atualizar app' { Act-AppUpdate }
+    }
     if ($g -and $g.Code -ne 0) {
         $bad++
         if ($bk) {
@@ -1885,6 +1910,48 @@ function Show-UpdateResult($rows) {
     Start-UpdateCheck
 }
 
+# ---------------------------------------------------------------- atualização do próprio DriverGuard
+
+$script:AppUpd = $null
+function Start-AppUpdateCheck {
+    Start-Bg ($LogicText + "`nGet-AppUpdate '$UpdateRepo' '$AppVersion'") {
+        param($out, $err)
+        $script:AppUpd = if ($out -and $out.Count) { $out[$out.Count - 1] } else { $null }
+        if ($script:AppUpd) {
+            $FooterText.Text = "DriverGuard $AppVersion  •  versão $($script:AppUpd.Version) disponível"
+            Update-Home
+        }
+    }
+}
+
+function Act-AppUpdate {
+    $u = $script:AppUpd
+    if (-not $u) { return }
+    $msg = "Atualizar o DriverGuard de $AppVersion para $($u.Version)?`n`nO app vai fechar, atualizar e abrir de novo sozinho em alguns segundos. Seu backup e suas configurações são mantidos."
+    if ($u.Notes) { $msg += "`n`nNovidades:`n" + $u.Notes }
+    if (-not (Show-Dialog 'Atualizar DriverGuard' $msg 'ask' -YesNo -YesText 'Atualizar')) { return }
+    $script:AppSetup = Join-Path $env:TEMP "DriverGuard-Setup-$($u.Version).exe"
+    $FooterText.Text = "Baixando DriverGuard $($u.Version)..."
+    $code = @"
+`$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+Invoke-WebRequest -UseBasicParsing -Uri '$($u.Url)' -OutFile '$($script:AppSetup)' -TimeoutSec 300
+`$want = ((Invoke-WebRequest -UseBasicParsing -Uri '$($u.ShaUrl)' -TimeoutSec 60).Content -split '\s+')[0].Trim().ToLower()
+`$got = (Get-FileHash '$($script:AppSetup)' -Algorithm SHA256).Hash.ToLower()
+if (`$want -ne `$got) { Remove-Item '$($script:AppSetup)' -Force; throw 'o arquivo baixado não confere (hash diferente)' }
+'ok'
+"@
+    Start-Bg $code {
+        param($out, $err)
+        if ($err -or -not $out -or "$($out[$out.Count - 1])" -ne 'ok') {
+            $FooterText.Text = "DriverGuard $AppVersion"
+            [void](Show-Dialog 'Atualização falhou' "Não foi possível baixar a versão nova. Nada foi alterado.`n`n$err" 'bad')
+            return
+        }
+        Start-Process $script:AppSetup -ArgumentList '/silent'
+        $app.Shutdown()
+    }
+}
+
 function Act-History {
     $rows = @($script:History | ForEach-Object {
         [pscustomobject]@{ Quando = $_.Quando.ToString('dd/MM/yyyy HH:mm'); Origem = $_.Origem; Detalhe = $_.Detalhe; Destaque = ($_.Origem -like 'Driver Booster*') }
@@ -1981,6 +2048,7 @@ $ChkMs.add_Unchecked({ Update-Filter })
 if (Test-WatchEnabled) { Set-WatchEnabled $true }
 Update-WatchButton
 Update-Sites
+$Win.add_Loaded({ Start-AppUpdateCheck })
 $BtnRestore.IsEnabled = [bool](Get-Backup (Get-Baseline).Version)
 
 [void]$app.Run($Win)

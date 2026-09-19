@@ -8,27 +8,25 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("DriverGuard - Instalador")]
 [assembly: AssemblyProduct("DriverGuard")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
 
 namespace DG
 {
     static class Setup
     {
         const string Title = "DriverGuard — Instalador";
+        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard";
 
+        // /silent = atualização automática feita pelo próprio app (sem perguntas, reabre o app no fim)
         [STAThread]
-        static int Main()
+        static int Main(string[] args)
         {
+            bool silent = Array.Exists(args, a => a.Equals("/silent", StringComparison.OrdinalIgnoreCase));
             string target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\DriverGuard");
-            string msg = "Instalar o DriverGuard 1.0 neste PC?\n\n" +
-                         "•  Não precisa de administrador\n" +
-                         "•  Não instala nenhum driver sem você confirmar\n" +
-                         "•  Pode ser removido em Configurações → Apps\n\n" +
-                         "Pasta: " + target;
-            if (MessageBox.Show(msg, Title, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 0;
-
             string exe = Path.Combine(target, "DriverGuard.exe");
+            string installed = InstalledVersion();
+
+            if (!silent && !Confirm(installed, target)) return 0;
+
             bool watch = false;
             try
             {
@@ -41,10 +39,10 @@ namespace DG
                 Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "DriverGuard.lnk"), exe, target);
                 Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "DriverGuard.lnk"), exe, target);
 
-                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard"))
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(UninstallKey))
                 {
                     k.SetValue("DisplayName", "DriverGuard");
-                    k.SetValue("DisplayVersion", "1.0.0");
+                    k.SetValue("DisplayVersion", Ver.V);
                     k.SetValue("Publisher", "DriverGuard");
                     k.SetValue("DisplayIcon", Path.Combine(target, "DriverGuard.ico"));
                     k.SetValue("InstallLocation", target);
@@ -70,10 +68,58 @@ namespace DG
             }
 
             if (watch) Process.Start(exe, "-Watch");
-            if (MessageBox.Show("DriverGuard instalado!\n\nAtalhos criados na Área de Trabalho e no Menu Iniciar.\n\nAbrir agora?",
-                    Title, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+            if (silent)
+            {
+                Process.Start(exe);
+                return 0;
+            }
+            string done = installed == null
+                ? "DriverGuard " + Ver.V + " instalado!\n\nAtalhos criados na Área de Trabalho e no Menu Iniciar."
+                : "DriverGuard atualizado para a versão " + Ver.V + "!\n\nSeu backup e suas configurações foram mantidos.";
+            if (MessageBox.Show(done + "\n\nAbrir agora?", Title, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                 Process.Start(exe);
             return 0;
+        }
+
+        static bool Confirm(string installed, string target)
+        {
+            string msg;
+            MessageBoxIcon icon = MessageBoxIcon.Question;
+            int cmp = installed == null ? 1 : Compare(Ver.V, installed);
+            if (installed == null)
+                msg = "Instalar o DriverGuard " + Ver.V + " neste PC?\n\n" +
+                      "•  Não precisa de administrador\n" +
+                      "•  Não instala nenhum driver sem você confirmar\n" +
+                      "•  Pode ser removido em Configurações → Apps\n\n" +
+                      "Pasta: " + target;
+            else if (cmp > 0)
+                msg = "Atualizar o DriverGuard da versão " + installed + " para a " + Ver.V + "?\n\n" +
+                      "Seu backup do driver de vídeo e suas configurações serão mantidos.";
+            else if (cmp == 0)
+                msg = "O DriverGuard " + Ver.V + " já está instalado.\n\nReinstalar mesmo assim? (útil se algo parou de funcionar)";
+            else
+            {
+                msg = "Você já tem uma versão MAIS NOVA instalada (" + installed + ").\n\n" +
+                      "Instalar a versão " + Ver.V + " por cima vai voltar para uma versão mais antiga. Continuar?";
+                icon = MessageBoxIcon.Warning;
+            }
+            return MessageBox.Show(msg, Title, MessageBoxButtons.YesNo, icon) == DialogResult.Yes;
+        }
+
+        static string InstalledVersion()
+        {
+            using (RegistryKey k = Registry.CurrentUser.OpenSubKey(UninstallKey))
+            {
+                object v = k == null ? null : k.GetValue("DisplayVersion");
+                return v == null ? null : v.ToString();
+            }
+        }
+
+        static int Compare(string a, string b)
+        {
+            Version va, vb;
+            if (!Version.TryParse(a, out va) || !Version.TryParse(b, out vb)) return string.CompareOrdinal(a, b);
+            return va.CompareTo(vb);
         }
 
         static void Extract(string name, string dir)

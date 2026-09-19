@@ -2,3 +2,4 @@
 dist/
 DriverGuard.exe
 DriverGuard.ico
+src/Version.g.cs
