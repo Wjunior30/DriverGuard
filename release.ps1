@@ -12,8 +12,12 @@ if (git -C $root status --porcelain) { throw 'Há alterações sem commit. Faça
 if (git -C $root tag --list "v$ver") { throw "A versão $ver já foi publicada. Aumente `$AppVersion no DriverGuard.ps1." }
 
 & "$root\build.ps1"
+# git e gh escrevem progresso no canal de erro; no PowerShell 5 isso não pode derrubar o script
+$ErrorActionPreference = 'Continue'
 git -C $root tag "v$ver"
-git -C $root push origin main "v$ver"
+git -C $root push origin main "v$ver" 2>&1 | Out-Host
+if ($LASTEXITCODE) { throw 'Falha no git push' }
 gh release create "v$ver" "$root\dist\DriverGuard-Setup.exe" "$root\dist\DriverGuard-Setup.exe.sha256" `
-    --repo $repo --title "DriverGuard $ver" --notes $Notes
+    --repo $repo --title "DriverGuard $ver" --notes $Notes 2>&1 | Out-Host
+if ($LASTEXITCODE) { throw 'Falha ao criar a release no GitHub' }
 "Publicado: DriverGuard $ver"
