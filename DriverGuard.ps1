@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch)
 
-$AppVersion = '1.1.2'
+$AppVersion = '1.1.3'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $DataDir = Join-Path $env:LOCALAPPDATA 'DriverGuard'
@@ -504,7 +504,8 @@ if ($SelfTest) {
 # ================================================================ interface (WPF)
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
 $dwmOk = $false
-if (Test-Path $Exe) { try { [void][Reflection.Assembly]::LoadFrom($Exe); $dwmOk = [bool]('DG.Dwm' -as [type]) } catch { } }
+# carrega pela memória: LoadFrom travaria o .exe e impediria a atualização automática de substituí-lo
+if (Test-Path $Exe) { try { [void][Reflection.Assembly]::Load([IO.File]::ReadAllBytes($Exe)); $dwmOk = [bool]('DG.Dwm' -as [type]) } catch { } }
 if (-not $dwmOk) { Add-Type -Namespace DG -Name Dwm -MemberDefinition '[DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int a, ref int v, int s);' }
 
 $Hex = @{ bad = '#F87171'; warn = '#FBBF24'; ok = '#34D399'; info = '#8B93A1'; ask = '#FF6A55' }

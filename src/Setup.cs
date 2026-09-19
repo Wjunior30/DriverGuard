@@ -122,12 +122,30 @@ namespace DG
             return va.CompareTo(vb);
         }
 
+        // O app que acabou de ser fechado pode segurar o arquivo por alguns instantes: tenta de novo por até 15 s.
         static void Extract(string name, string dir)
         {
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
-            using (FileStream f = File.Create(Path.Combine(dir, name)))
+            for (int i = 0; ; i++)
             {
-                s.CopyTo(f);
+                try
+                {
+                    using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
+                    using (FileStream f = File.Create(Path.Combine(dir, name)))
+                    {
+                        s.CopyTo(f);
+                    }
+                    return;
+                }
+                catch (IOException)
+                {
+                    if (i >= 30) throw;
+                    System.Threading.Thread.Sleep(500);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    if (i >= 30) throw;
+                    System.Threading.Thread.Sleep(500);
+                }
             }
         }
 
@@ -162,7 +180,13 @@ namespace DG
                         object cl = o["CommandLine"];
                         if (cl != null && cl.ToString().IndexOf("DriverGuard.ps1", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            try { Process.GetProcessById(Convert.ToInt32(o["ProcessId"])).Kill(); } catch { }
+                            try
+                            {
+                                Process p = Process.GetProcessById(Convert.ToInt32(o["ProcessId"]));
+                                p.Kill();
+                                p.WaitForExit(5000);   // espera o processo sair de verdade e soltar os arquivos
+                            }
+                            catch { }
                         }
                     }
                 }
