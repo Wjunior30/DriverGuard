@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch, [switch]$Rescue, [switch]$AutoRescue, [switch]$HoldWU)
 
-$AppVersion = '1.3.1'
+$AppVersion = '1.3.2'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 # Chave pública das versões. Uma atualização só é aceita se vier assinada pela chave privada correspondente,
 # que fica fora do GitHub (%USERPROFILE%\.HollowDrivers). Assim, quem invadir a conta do GitHub não consegue publicar malware.
@@ -1513,84 +1513,80 @@ $MainXaml = @'
       <TextBlock Grid.Row="3" x:Name="StatusText" Foreground="{StaticResource Dim}" FontSize="12" Margin="4,10,0,0"/>
       </Grid>
 
-      <!-- ===== seção: Placa de vídeo ===== -->
-      <Grid x:Name="PanVideo" Grid.Column="1" Margin="26,20,26,14" Visibility="Collapsed">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <StackPanel>
-          <TextBlock Text="Meus drivers" Style="{StaticResource SectionTitle}"/>
-          <TextBlock Text="Os drivers que fazem seu PC funcionar: vídeo, chipset, rede, áudio e armazenamento. O HollowDrivers guarda a versão de cada um e avisa se algo trocar." Style="{StaticResource SectionSub}"/>
-        </StackPanel>
-        <Grid Grid.Row="1" Margin="0,18,0,0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="22,18">
-            <StackPanel>
-              <TextBlock x:Name="GpuText" TextWrapping="Wrap" LineHeight="23"/>
-              <WrapPanel Margin="0,14,0,0">
-                <WrapPanel.Resources><Style TargetType="Button" BasedOn="{StaticResource Pill}"/></WrapPanel.Resources>
-                <Button x:Name="BtnGood" Style="{StaticResource PillAccent}" Content="Fazer backup"/>
-                <Button x:Name="BtnRestore" Content="Restaurar"/>
-                <Button x:Name="BtnHist" Content="Histórico"/>
-                <Button x:Name="BtnEnable" Style="{StaticResource PillAccent}" Content="Reativar placa" Visibility="Collapsed"/>
-              </WrapPanel>
-            </StackPanel>
-          </Border>
-          <Border Grid.Column="1" Margin="16,0,0,0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="22,18">
-            <TextBlock x:Name="SysText" TextWrapping="Wrap" LineHeight="23"/>
-          </Border>
-        </Grid>
-        <StackPanel Grid.Row="2" Margin="0,20,0,8">
-          <TextBlock Text="DEMAIS DRIVERS" Style="{StaticResource GroupLbl}"/>
-          <TextBlock x:Name="KeyResumo" Foreground="{StaticResource Dim}" FontSize="12.5" Margin="0,0,0,10"/>
-          <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="330">
-            <WrapPanel x:Name="KeyCards"/>
-          </ScrollViewer>
-        </StackPanel>
-
-        <Grid Grid.Row="3" Margin="0,8,0,0">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
-          <Grid Margin="0,0,0,8">
-            <StackPanel>
-              <TextBlock Text="LISTA COMPLETA" Style="{StaticResource GroupLbl}"/>
-              <TextBlock Text="Visão de tudo de uma vez, com backup em lote." Foreground="{StaticResource Dim}" FontSize="12.5"/>
-            </StackPanel>
-            <Button x:Name="BtnKeyAll" Style="{StaticResource PillAccent}" Content="Fazer backup de todos" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0"/>
-          </Grid>
-          <Border Grid.Row="1" Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="4">
-            <DataGrid x:Name="KeyGrid" AutoGenerateColumns="False">
-              <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Situação" Width="190">
-                  <DataGridTemplateColumn.CellTemplate>
-                    <DataTemplate>
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse Width="8" Height="8" Fill="{Binding Cor}" Margin="0,0,9,0"/>
-                        <TextBlock Text="{Binding Estado}" Foreground="{Binding Cor}" FontWeight="SemiBold"/>
-                      </StackPanel>
-                    </DataTemplate>
-                  </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Categoria" Binding="{Binding Categoria}" Width="120"/>
-                <DataGridTextColumn Header="Dispositivo" Binding="{Binding Nome}" Width="*"/>
-                <DataGridTextColumn Header="Fabricante" Binding="{Binding Fabricante}" Width="160"/>
-                <DataGridTextColumn Header="Versão" Binding="{Binding Versao}" Width="130"/>
-                <DataGridTextColumn Header="Cópia salva" Binding="{Binding Backup}" Width="120"/>
-              </DataGrid.Columns>
-            </DataGrid>
-          </Border>
-        </Grid>
-      </Grid>
-
-      <!-- ===== seção: Sistema ===== -->
+      <!-- ===== seção: Meus drivers ===== -->
+       <Grid x:Name="PanVideo" Grid.Column="1" Margin="26,20,26,14" Visibility="Collapsed">
+         <Grid.RowDefinitions>
+           <RowDefinition Height="Auto"/>
+           <RowDefinition Height="Auto"/>
+           <RowDefinition Height="*"/>
+         </Grid.RowDefinitions>
+         <StackPanel>
+           <TextBlock Text="Meus drivers" Style="{StaticResource SectionTitle}"/>
+           <TextBlock Text="Cada driver tem sua própria cópia. Veja o que já está protegido e faça backup dos que faltam." Style="{StaticResource SectionSub}"/>
+         </StackPanel>
+         <Border Grid.Row="1" Margin="0,18,0,0" Background="{StaticResource Surface2}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="20,16">
+           <Grid>
+             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+             <StackPanel>
+               <TextBlock Text="PROTEÇÃO DOS DRIVERS" Style="{StaticResource GroupLbl}"/>
+               <TextBlock x:Name="KeyCoverage" Text="Verificando cópias..." FontSize="22" FontWeight="SemiBold" FontFamily="{StaticResource Display}" Margin="0,3,0,2"/>
+               <TextBlock x:Name="KeyResumo" Foreground="{StaticResource Dim}" FontSize="12.5"/>
+             </StackPanel>
+             <Button Grid.Column="1" x:Name="BtnKeyAll" Style="{StaticResource PillAccent}" Content="Fazer backup dos que faltam" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="18,0,0,0" Padding="18,10"/>
+           </Grid>
+         </Border>
+         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
+           <StackPanel>
+             <Grid>
+               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+               <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="20,16">
+                 <StackPanel>
+                   <TextBlock x:Name="GpuText" TextWrapping="Wrap" LineHeight="22"/>
+                   <WrapPanel Margin="0,12,0,0">
+                     <WrapPanel.Resources><Style TargetType="Button" BasedOn="{StaticResource Pill}"/></WrapPanel.Resources>
+                     <Button x:Name="BtnGood" Style="{StaticResource PillAccent}" Content="Fazer backup"/>
+                     <Button x:Name="BtnRestore" Content="Restaurar"/>
+                     <Button x:Name="BtnHist" Content="Histórico"/>
+                     <Button x:Name="BtnEnable" Style="{StaticResource PillAccent}" Content="Reativar placa" Visibility="Collapsed"/>
+                   </WrapPanel>
+                 </StackPanel>
+               </Border>
+               <Border Grid.Column="1" Margin="16,0,0,0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="20,16">
+                 <TextBlock x:Name="SysText" TextWrapping="Wrap" LineHeight="22"/>
+               </Border>
+             </Grid>
+             <StackPanel Margin="0,24,0,0">
+               <TextBlock Text="OUTROS DRIVERS" Style="{StaticResource GroupLbl}"/>
+               <TextBlock Text="O estado e a cópia de cada driver aparecem separadamente." Foreground="{StaticResource Dim}" FontSize="12.5" Margin="0,1,0,12"/>
+               <WrapPanel x:Name="KeyCards"/>
+             </StackPanel>
+             <Expander Header="Ver lista técnica completa" Foreground="{StaticResource Text}" FontWeight="SemiBold" Margin="0,8,0,20">
+               <Border Margin="0,12,0,0" Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="4">
+                 <DataGrid x:Name="KeyGrid" AutoGenerateColumns="False" Height="320">
+                   <DataGrid.Columns>
+                     <DataGridTemplateColumn Header="Situação" Width="190">
+                       <DataGridTemplateColumn.CellTemplate>
+                         <DataTemplate>
+                           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                             <Ellipse Width="8" Height="8" Fill="{Binding Cor}" Margin="0,0,9,0"/>
+                             <TextBlock Text="{Binding Estado}" Foreground="{Binding Cor}" FontWeight="SemiBold"/>
+                           </StackPanel>
+                         </DataTemplate>
+                       </DataGridTemplateColumn.CellTemplate>
+                     </DataGridTemplateColumn>
+                     <DataGridTextColumn Header="Categoria" Binding="{Binding Categoria}" Width="120"/>
+                     <DataGridTextColumn Header="Dispositivo" Binding="{Binding Nome}" Width="*"/>
+                     <DataGridTextColumn Header="Fabricante" Binding="{Binding Fabricante}" Width="160"/>
+                     <DataGridTextColumn Header="Versão" Binding="{Binding Versao}" Width="130"/>
+                     <DataGridTextColumn Header="Cópia salva" Binding="{Binding Backup}" Width="120"/>
+                   </DataGrid.Columns>
+                 </DataGrid>
+               </Border>
+             </Expander>
+           </StackPanel>
+         </ScrollViewer>
+       </Grid>
+       <!-- ===== seção: Sistema ===== -->
       <Grid x:Name="PanSystem" Grid.Column="1" Margin="26,20,26,14" Visibility="Collapsed">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
@@ -1799,7 +1795,7 @@ foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'BtnHomeScan', 'BtnHomeConf
     'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnEnable', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
     'SitesList', 'SearchBox', 'ChkMs', 'DriverGrid', 'StatusText', 'EmptyText', 'GuardText',
     'NavDrivers', 'NavVideo', 'NavSystem', 'NavGuard', 'NavWin', 'PanWin', 'ConfigView', 'BtnConfigClose', 'WuText', 'SrText', 'BtnWuHold', 'BtnWuKeep', 'BtnWuDrv', 'BtnSrPoint', 'BtnSrOpen', 'AdvCol', 'AdvLogoText', 'HomeRail', 'HomeRailBox', 'AdvRailBox', 'BtnRailHome', 'BtnRailAdv', 'ConfigThemes', 'ConfigUpd', 'BtnAppCheck', 'BtnAppInstall', 'SysText',
-    'KeyCards', 'KeyResumo', 'BtnKeyAll', 'KeyGrid', 'BtnRescue', 'PanDrivers', 'PanVideo', 'PanSystem', 'PanGuard',
+    'KeyCards', 'KeyCoverage', 'KeyResumo', 'BtnKeyAll', 'KeyGrid', 'BtnRescue', 'PanDrivers', 'PanVideo', 'PanSystem', 'PanGuard',
     'ChipAll', 'ChipBad', 'ChipOld', 'ChipVideo', 'ChipNet', 'ChipAudio') {
     Set-Variable -Name $n -Value $Win.FindName($n) -Scope Script
 }
@@ -2158,14 +2154,14 @@ function Set-Dica($elemento, [string]$texto) {
 
 function New-KeyCard($k, $estado, $cor, $bk) {
     $card = New-Object Windows.Controls.Border
-    $card.Width = 352; $card.Margin = '0,0,14,14'; $card.Padding = '18,16'; $card.CornerRadius = 14
+    $card.Width = 324; $card.Margin = '0,0,10,10'; $card.Padding = '16,14'; $card.CornerRadius = 16
     $card.Background = Get-Brush '#171A21'; $card.BorderBrush = Get-Brush $(if ($estado -eq 'TROCADO') { $cor } else { '#2A2F3A' }); $card.BorderThickness = $(if ($estado -eq 'TROCADO') { 2 } else { 1 })
     $sp = New-Object Windows.Controls.StackPanel
 
     # linha de cima: categoria + situação
     $top = New-Object Windows.Controls.DockPanel
     $sit = New-Object Windows.Controls.TextBlock
-    $sit.Text = $estado; $sit.Foreground = Get-Brush $cor; $sit.FontSize = 11.5; $sit.FontWeight = [Windows.FontWeights]::SemiBold
+    $sit.Text = $(if ($estado -eq 'Como sempre esteve') { 'Sem alterações' } else { $estado }); $sit.Foreground = Get-Brush $cor; $sit.FontSize = 11.5; $sit.FontWeight = [Windows.FontWeights]::SemiBold
     [Windows.Controls.DockPanel]::SetDock($sit, 'Right'); [void]$top.Children.Add($sit)
     $cat = New-Object Windows.Controls.TextBlock
     $cat.FontSize = 11.5; $cat.Foreground = Get-Brush $Hex.info; $cat.FontWeight = [Windows.FontWeights]::SemiBold
@@ -2206,7 +2202,7 @@ function New-KeyCard($k, $estado, $cor, $bk) {
     foreach ($a in @(
             @{ T = $(if ($bk) { 'Refazer cópia' } else { 'Fazer backup' }); S = $(if ($bk) { 'Pill' } else { 'PillAccent' }); F = 'backup'; E = $true },
             @{ T = 'Restaurar'; S = 'Pill'; F = 'restore'; E = [bool]$bk },
-            @{ T = 'Quem instalou'; S = 'Pill'; F = 'hist'; E = $true })) {
+            @{ T = 'Origem'; S = 'Pill'; F = 'hist'; E = $true })) {
         $b = New-Object Windows.Controls.Button
         $b.Content = $a.T; $b.Style = $app.Resources[$a.S]; $b.Tag = ('{0}|{1}' -f $a.F, $k.Id)
         $b.FontSize = 12; $b.Padding = '12,6'; $b.Margin = '0,0,6,0'; $b.IsEnabled = $a.E
@@ -2241,10 +2237,10 @@ function Update-KeyCards {
     }
     $kt.EndLoadData()
     if (-not $KeyGrid.ItemsSource) { $KeyGrid.ItemsSource = $kt.DefaultView }
-    $KeyResumo.Text = '{0} além do vídeo  •  {1} com cópia salva{2}' -f (Get-Plural ($script:Keys.Count - 1) 'driver' 'drivers'),
-        ($script:Keys.Count - $semCopia), $(if ($trocados) { "  •  $trocados trocado(s)" } else { '' })
+    $KeyCoverage.Text = '{0} de {1} com cópia salva' -f ($script:Keys.Count - $semCopia), $script:Keys.Count
+    $KeyResumo.Text = 'Cópias individuais por driver' + $(if ($trocados) { "  •  $trocados alterado(s)" } else { '  •  nenhuma alteração detectada' })
     $BtnKeyAll.IsEnabled = ($semCopia -gt 0)
-    $BtnKeyAll.Content = $(if ($semCopia -gt 0) { 'Fazer backup de todos ({0} sem cópia)' -f $semCopia } else { 'Todos já têm cópia' })
+    $BtnKeyAll.Content = $(if ($semCopia -gt 0) { 'Fazer backup dos {0} restantes' -f $semCopia } else { 'Todos com cópia salva' })
 }
 
 # cartão com processador, placa-mãe, BIOS, chipset e memória
