@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch, [switch]$Rescue, [switch]$AutoRescue, [switch]$HoldWU)
 
-$AppVersion = '1.3.2'
+$AppVersion = '1.3.3'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 # Chave pública das versões. Uma atualização só é aceita se vier assinada pela chave privada correspondente,
 # que fica fora do GitHub (%USERPROFILE%\.HollowDrivers). Assim, quem invadir a conta do GitHub não consegue publicar malware.
@@ -1614,7 +1614,21 @@ $MainXaml = @'
             <StackPanel x:Name="SitesList"/>
           </Border>
         </Popup>
-      </Grid>
+      <Border Grid.Row="3" Margin="0,22,0,0" MaxWidth="720" HorizontalAlignment="Left" VerticalAlignment="Top"
+                 Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}" BorderThickness="1" CornerRadius="14" Padding="22,18">
+           <StackPanel>
+             <TextBlock Text="LIBERAR ESPAÇO" Style="{StaticResource GroupLbl}"/>
+             <TextBlock x:Name="StorageText" FontSize="18" FontWeight="SemiBold" FontFamily="{StaticResource Display}" Margin="0,3,0,8"/>
+             <TextBlock Text="Revise arquivos temporários, aplicativos sem uso e arquivos grandes. Você escolhe o que apagar nas configurações do Windows."
+                        TextWrapping="Wrap" Foreground="{StaticResource Dim}" FontSize="12.5"/>
+             <WrapPanel Margin="0,14,0,0">
+               <WrapPanel.Resources><Style TargetType="Button" BasedOn="{StaticResource Pill}"/></WrapPanel.Resources>
+               <Button x:Name="BtnCleanup" Style="{StaticResource PillAccent}" Content="Ver recomendações de limpeza"/>
+               <Button x:Name="BtnStorageSense" Content="Configurar limpeza automática"/>
+             </WrapPanel>
+           </StackPanel>
+         </Border>
+       </Grid>
 
       <!-- ===== seção: Windows Update ===== -->
       <Grid x:Name="PanWin" Grid.Column="1" Margin="26,20,26,14" Visibility="Collapsed">
@@ -1794,7 +1808,7 @@ foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'BtnHomeScan', 'BtnHomeConf
     'VerdictIcon', 'VerdictText', 'VerdictSub', 'Findings', 'BtnBack', 'GpuText', 'HealthText', 'BtnScan', 'BtnUpd', 'BtnGood',
     'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnEnable', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
     'SitesList', 'SearchBox', 'ChkMs', 'DriverGrid', 'StatusText', 'EmptyText', 'GuardText',
-    'NavDrivers', 'NavVideo', 'NavSystem', 'NavGuard', 'NavWin', 'PanWin', 'ConfigView', 'BtnConfigClose', 'WuText', 'SrText', 'BtnWuHold', 'BtnWuKeep', 'BtnWuDrv', 'BtnSrPoint', 'BtnSrOpen', 'AdvCol', 'AdvLogoText', 'HomeRail', 'HomeRailBox', 'AdvRailBox', 'BtnRailHome', 'BtnRailAdv', 'ConfigThemes', 'ConfigUpd', 'BtnAppCheck', 'BtnAppInstall', 'SysText',
+    'NavDrivers', 'NavVideo', 'NavSystem', 'NavGuard', 'NavWin', 'PanWin', 'ConfigView', 'BtnConfigClose', 'WuText', 'SrText', 'BtnWuHold', 'BtnWuKeep', 'BtnWuDrv', 'BtnSrPoint', 'BtnSrOpen', 'StorageText', 'BtnCleanup', 'BtnStorageSense', 'AdvCol', 'AdvLogoText', 'HomeRail', 'HomeRailBox', 'AdvRailBox', 'BtnRailHome', 'BtnRailAdv', 'ConfigThemes', 'ConfigUpd', 'BtnAppCheck', 'BtnAppInstall', 'SysText',
     'KeyCards', 'KeyCoverage', 'KeyResumo', 'BtnKeyAll', 'KeyGrid', 'BtnRescue', 'PanDrivers', 'PanVideo', 'PanSystem', 'PanGuard',
     'ChipAll', 'ChipBad', 'ChipOld', 'ChipVideo', 'ChipNet', 'ChipAudio') {
     Set-Variable -Name $n -Value $Win.FindName($n) -Scope Script
@@ -3322,6 +3336,21 @@ function Act-SrPoint {
     }
 }
 
+function Update-StorageInfo {
+    try {
+        $root = [IO.Path]::GetPathRoot($env:SystemRoot)
+        $drive = New-Object IO.DriveInfo $root
+        if (-not $drive.IsReady) { throw 'unavailable' }
+        $StorageText.Text = '{0:N1} GB livres de {1:N1} GB em {2}' -f ($drive.AvailableFreeSpace / 1GB), ($drive.TotalSize / 1GB), $drive.Name.TrimEnd('\')
+    } catch {
+        $StorageText.Text = 'Espaço livre indisponível'
+    }
+}
+
+function Open-StorageSettings([string]$page) {
+    try { Start-Process -FilePath $page -ErrorAction Stop }
+    catch { [void](Show-Dialog 'Não foi possível abrir' 'Abra Configurações do Windows > Sistema > Armazenamento.' 'warn') }
+}
 function Act-SrOpen {
     if (-not (Show-Dialog 'Restaurar o Windows' "Vou abrir a Restauração do Sistema do Windows.`n`nLá você escolhe um dos pontos salvos e o PC reinicia para voltar àquele momento. Drivers, programas e configurações voltam; seus arquivos pessoais ficam como estão." 'ask' -YesNo -YesText 'Abrir')) { return }
     try { Start-Process 'rstrui.exe' } catch { [void](Show-Dialog 'Não foi possível abrir' $_.Exception.Message 'bad') }
@@ -3585,7 +3614,7 @@ $ChkMs.add_Unchecked({ Update-Filter })
 foreach ($n in $ChipNames) { (Get-Variable $n -Scope Script -ValueOnly).add_Click({ param($s, $e) Set-Chip $s }) }
 $NavDrivers.add_Click({ Show-Section 'drivers' })
 $NavVideo.add_Click({ Show-Section 'video' })
-$NavSystem.add_Click({ Show-Section 'sistema' })
+$NavSystem.add_Click({ Show-Section 'sistema'; Update-StorageInfo })
 $NavGuard.add_Click({ Show-Section 'protecao' })
 $NavWin.add_Click({ Show-Section 'windows'; Start-WuCheck })
 
@@ -3595,6 +3624,11 @@ $BtnWuKeep.add_Click({ Act-WuKeep })
 $BtnWuDrv.add_Click({ Act-WuDrv })
 $BtnSrPoint.add_Click({ Act-SrPoint })
 $BtnSrOpen.add_Click({ Act-SrOpen })
+$BtnCleanup.add_Click({
+    $page = if ([Environment]::OSVersion.Version.Build -ge 22000) { 'ms-settings:storagerecommendations' } else { 'ms-settings:storagesense' }
+    Open-StorageSettings $page
+})
+$BtnStorageSense.add_Click({ Open-StorageSettings 'ms-settings:storagepolicies' })
 $BtnRailHome.add_Click({ Set-Rail (-not $script:RailOpen) })
 $BtnRailAdv.add_Click({ Set-Rail (-not $script:RailOpen) })
 $BtnAppCheck.add_Click({ Start-AppUpdateCheck $true })
@@ -3615,6 +3649,7 @@ $Win.add_KeyDown({ param($s, $e)
 if (Test-WatchEnabled) { Set-WatchEnabled $true }
 Set-Rail $true
 Add-ThemeCards $ConfigThemes
+Update-StorageInfo
 Update-ConfigCard
 Update-WuCard
 Update-WatchButton
