@@ -2,4 +2,6 @@
 dist/
 DriverGuard.exe
 DriverGuard.ico
+HollowDrivers.exe
+HollowDrivers.ico
 src/Version.g.cs

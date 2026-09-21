@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Management;
@@ -6,24 +6,25 @@ using System.Reflection;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("DriverGuard - Instalador")]
-[assembly: AssemblyProduct("DriverGuard")]
+[assembly: AssemblyTitle("HollowDrivers - Instalador")]
+[assembly: AssemblyProduct("HollowDrivers")]
 
 namespace DG
 {
     static class Setup
     {
-        const string Title = "DriverGuard — Instalador";
-        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard";
+        const string Title = "HollowDrivers — Instalador";
+        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\HollowDrivers";
 
         // /silent = atualização automática feita pelo próprio app (sem perguntas, reabre o app no fim)
         [STAThread]
         static int Main(string[] args)
         {
             bool silent = Array.Exists(args, a => a.Equals("/silent", StringComparison.OrdinalIgnoreCase));
-            string target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\DriverGuard");
-            string exe = Path.Combine(target, "DriverGuard.exe");
+            string target = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\HollowDrivers");
+            string exe = Path.Combine(target, "HollowDrivers.exe");
             string installed = InstalledVersion();
+            bool legacyInstalled = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard") != null;
 
             if (!silent && !Confirm(installed, target)) return 0;
 
@@ -32,19 +33,19 @@ namespace DG
             {
                 KillRunning();
                 Directory.CreateDirectory(target);
-                Extract("DriverGuard.ps1", target);
-                Extract("DriverGuard.exe", target);
-                Extract("DriverGuard.ico", target);
+                Extract("HollowDrivers.ps1", target);
+                Extract("HollowDrivers.exe", target);
+                Extract("HollowDrivers.ico", target);
 
-                Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "DriverGuard.lnk"), exe, target);
-                Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "DriverGuard.lnk"), exe, target);
+                Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "HollowDrivers.lnk"), exe, target);
+                Shortcut(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "HollowDrivers.lnk"), exe, target);
 
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(UninstallKey))
                 {
-                    k.SetValue("DisplayName", "DriverGuard");
+                    k.SetValue("DisplayName", "HollowDrivers");
                     k.SetValue("DisplayVersion", Ver.V);
-                    k.SetValue("Publisher", "DriverGuard");
-                    k.SetValue("DisplayIcon", Path.Combine(target, "DriverGuard.ico"));
+                    k.SetValue("Publisher", "HollowDrivers");
+                    k.SetValue("DisplayIcon", Path.Combine(target, "HollowDrivers.ico"));
                     k.SetValue("InstallLocation", target);
                     k.SetValue("UninstallString", "\"" + exe + "\" --uninstall");
                     k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
@@ -54,11 +55,18 @@ namespace DG
                 }
                 using (RegistryKey r = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
                 {
-                    if (r != null && r.GetValue("DriverGuard") != null)
+                    if (r != null)
                     {
-                        r.SetValue("DriverGuard", "\"" + exe + "\" -Watch");
-                        watch = true;
+                        watch = r.GetValue("HollowDrivers") != null || r.GetValue("DriverGuard") != null;
+                        if (watch) r.SetValue("HollowDrivers", "\"" + exe + "\" -Watch");
+                        if (legacyInstalled) r.DeleteValue("DriverGuard", false);
                     }
+                }
+                if (legacyInstalled)
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard", false);
+                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "DriverGuard.lnk"));
+                    TryDelete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "DriverGuard.lnk"));
                 }
             }
             catch (Exception ex)
@@ -74,8 +82,8 @@ namespace DG
                 return 0;
             }
             string done = installed == null
-                ? "DriverGuard " + Ver.V + " instalado!\n\nAtalhos criados na Área de Trabalho e no Menu Iniciar."
-                : "DriverGuard atualizado para a versão " + Ver.V + "!\n\nSeu backup e suas configurações foram mantidos.";
+                ? "HollowDrivers " + Ver.V + " instalado!\n\nAtalhos criados na Área de Trabalho e no Menu Iniciar."
+                : "HollowDrivers atualizado para a versão " + Ver.V + "!\n\nSeu backup e suas configurações foram mantidos.";
             if (MessageBox.Show(done + "\n\nAbrir agora?", Title, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                 Process.Start(exe);
             return 0;
@@ -87,16 +95,16 @@ namespace DG
             MessageBoxIcon icon = MessageBoxIcon.Question;
             int cmp = installed == null ? 1 : Compare(Ver.V, installed);
             if (installed == null)
-                msg = "Instalar o DriverGuard " + Ver.V + " neste PC?\n\n" +
+                msg = "Instalar o HollowDrivers " + Ver.V + " neste PC?\n\n" +
                       "•  Não precisa de administrador\n" +
                       "•  Não instala nenhum driver sem você confirmar\n" +
                       "•  Pode ser removido em Configurações → Apps\n\n" +
                       "Pasta: " + target;
             else if (cmp > 0)
-                msg = "Atualizar o DriverGuard da versão " + installed + " para a " + Ver.V + "?\n\n" +
+                msg = "Atualizar o HollowDrivers da versão " + installed + " para a " + Ver.V + "?\n\n" +
                       "Seu backup do driver de vídeo e suas configurações serão mantidos.";
             else if (cmp == 0)
-                msg = "O DriverGuard " + Ver.V + " já está instalado.\n\nReinstalar mesmo assim? (útil se algo parou de funcionar)";
+                msg = "O HollowDrivers " + Ver.V + " já está instalado.\n\nReinstalar mesmo assim? (útil se algo parou de funcionar)";
             else
             {
                 msg = "Você já tem uma versão MAIS NOVA instalada (" + installed + ").\n\n" +
@@ -106,11 +114,21 @@ namespace DG
             return MessageBox.Show(msg, Title, MessageBoxButtons.YesNo, icon) == DialogResult.Yes;
         }
 
+        static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        }
+
         static string InstalledVersion()
         {
             using (RegistryKey k = Registry.CurrentUser.OpenSubKey(UninstallKey))
             {
                 object v = k == null ? null : k.GetValue("DisplayVersion");
+                if (v == null)
+                {
+                    using (RegistryKey legacy = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DriverGuard"))
+                        v = legacy == null ? null : legacy.GetValue("DisplayVersion");
+                }
                 return v == null ? null : v.ToString();
             }
         }
@@ -158,7 +176,7 @@ namespace DG
             st.InvokeMember("TargetPath", BindingFlags.SetProperty, null, sc, new object[] { exe });
             st.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, sc, new object[] { dir });
             st.InvokeMember("IconLocation", BindingFlags.SetProperty, null, sc, new object[] { exe + ",0" });
-            st.InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { "DriverGuard" });
+            st.InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { "HollowDrivers" });
             st.InvokeMember("Save", BindingFlags.InvokeMethod, null, sc, null);
         }
 
@@ -178,7 +196,7 @@ namespace DG
                     foreach (ManagementObject o in s.Get())
                     {
                         object cl = o["CommandLine"];
-                        if (cl != null && cl.ToString().IndexOf("DriverGuard.ps1", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (cl != null && (cl.ToString().IndexOf("HollowDrivers.ps1", StringComparison.OrdinalIgnoreCase) >= 0 || cl.ToString().IndexOf("DriverGuard.ps1", StringComparison.OrdinalIgnoreCase) >= 0))
                         {
                             try
                             {

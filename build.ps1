@@ -1,4 +1,4 @@
-# Gera dist\DriverGuard.exe e dist\DriverGuard-Setup.exe (usa o compilador C# que já vem no Windows).
+﻿# Gera dist\HollowDrivers.exe e dist\HollowDrivers-Setup.exe (usa o compilador C# que já vem no Windows).
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $dist = Join-Path $root 'dist'
@@ -24,7 +24,7 @@ $pngs = foreach ($s in 16, 24, 32, 48, 64, 128, 256) {
     $ms = New-Object IO.MemoryStream; $bmp.Save($ms, [Drawing.Imaging.ImageFormat]::Png)
     , @($s, $ms.ToArray())
 }
-$ico = Join-Path $root 'DriverGuard.ico'
+$ico = Join-Path $root 'HollowDrivers.ico'
 $bw = New-Object IO.BinaryWriter([IO.File]::Create($ico))
 $bw.Write([uint16]0); $bw.Write([uint16]1); $bw.Write([uint16]$pngs.Count)
 $offset = 6 + 16 * $pngs.Count
@@ -37,12 +37,12 @@ foreach ($p in $pngs) {
 foreach ($p in $pngs) { $bw.Write([byte[]]$p[1]) }
 $bw.Close()
 
-$app = Join-Path $root 'DriverGuard.ps1'   # PowerShell 5.1 precisa de BOM para ler acentos
+$app = Join-Path $root 'HollowDrivers.ps1'   # PowerShell 5.1 precisa de BOM para ler acentos
 [IO.File]::WriteAllText($app, [IO.File]::ReadAllText($app, [Text.Encoding]::UTF8), (New-Object Text.UTF8Encoding $true))
 
-# versão única: vem do $AppVersion do DriverGuard.ps1
+# versão única: vem do $AppVersion do HollowDrivers.ps1
 $ver = ([regex]::Match([IO.File]::ReadAllText($app), "\`$AppVersion = '([\d\.]+)'")).Groups[1].Value
-if (-not $ver) { throw 'Não achei $AppVersion no DriverGuard.ps1' }
+if (-not $ver) { throw 'Não achei $AppVersion no HollowDrivers.ps1' }
 $verCs = "$root\src\Version.g.cs"
 [IO.File]::WriteAllText($verCs, @"
 [assembly: System.Reflection.AssemblyVersion("$ver.0")]
@@ -51,21 +51,24 @@ namespace DG { static class Ver { public const string V = "$ver"; } }
 "@)
 
 $refs = '/codepage:65001', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll'
-& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\DriverGuard.exe" @refs "$root\src\Launcher.cs" $verCs
-if ($LASTEXITCODE) { throw 'Falha ao compilar DriverGuard.exe' }
+& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\HollowDrivers.exe" @refs "$root\src\Launcher.cs" $verCs
+if ($LASTEXITCODE) { throw 'Falha ao compilar HollowDrivers.exe' }
 
-Copy-Item "$root\DriverGuard.ps1" $dist -Force
+Copy-Item "$root\HollowDrivers.ps1" $dist -Force
 Copy-Item $ico $dist -Force
-Copy-Item "$dist\DriverGuard.exe" $root -Force   # para a pasta de desenvolvimento também abrir sem console
+Copy-Item "$dist\HollowDrivers.exe" $root -Force   # para a pasta de desenvolvimento também abrir sem console
 
-& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\DriverGuard-Setup.exe" @refs `
-    "/resource:$dist\DriverGuard.ps1,DriverGuard.ps1" "/resource:$dist\DriverGuard.exe,DriverGuard.exe" "/resource:$ico,DriverGuard.ico" `
+& $csc /nologo /target:winexe /optimize+ "/win32icon:$ico" "/out:$dist\HollowDrivers-Setup.exe" @refs `
+    "/resource:$dist\HollowDrivers.ps1,HollowDrivers.ps1" "/resource:$dist\HollowDrivers.exe,HollowDrivers.exe" "/resource:$ico,HollowDrivers.ico" `
     "$root\src\Setup.cs" $verCs
-if ($LASTEXITCODE) { throw 'Falha ao compilar DriverGuard-Setup.exe' }
+if ($LASTEXITCODE) { throw 'Falha ao compilar HollowDrivers-Setup.exe' }
 
 # hash para o app conferir o download da atualização
-$hash = (Get-FileHash "$dist\DriverGuard-Setup.exe" -Algorithm SHA256).Hash.ToLower()
+$hash = (Get-FileHash "$dist\HollowDrivers-Setup.exe" -Algorithm SHA256).Hash.ToLower()
+[IO.File]::WriteAllText("$dist\HollowDrivers-Setup.exe.sha256", "$hash  HollowDrivers-Setup.exe")
+# Os apps DriverGuard 1.1.x procuram estes nomes na release para migrar.
+Copy-Item "$dist\HollowDrivers-Setup.exe" "$dist\DriverGuard-Setup.exe" -Force
 [IO.File]::WriteAllText("$dist\DriverGuard-Setup.exe.sha256", "$hash  DriverGuard-Setup.exe")
-"DriverGuard $ver"
+"HollowDrivers $ver"
 
 Get-ChildItem $dist | Select-Object Name, @{ n = 'KB'; e = { [math]::Round($_.Length / 1KB) } } | Format-Table -AutoSize
