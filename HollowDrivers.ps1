@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch, [switch]$Rescue, [switch]$AutoRescue, [switch]$HoldWU)
 
-$AppVersion = '1.3.6'
+$AppVersion = '1.3.7'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 # Chave pública das versões. Uma atualização só é aceita se vier assinada pela chave privada correspondente,
 # que fica fora do GitHub (%USERPROFILE%\.HollowDrivers). Assim, quem invadir a conta do GitHub não consegue publicar malware.
@@ -1352,10 +1352,10 @@ $MainXaml = @'
               <ToggleButton x:Name="HomeNavHome" Style="{StaticResource Nav}" Tag="&#xE80F;" Content="Início" IsChecked="True"/>
               <Button x:Name="BtnAdvanced" Style="{StaticResource NavBtn}" Tag="&#xE896;" Content="Drivers"/>
               <Button x:Name="HomeNavVideo" Style="{StaticResource NavBtn}" Tag="&#xE7F4;" Content="Meus drivers"/>
-              <Button x:Name="HomeNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
-              <Button x:Name="HomeNavClean" Style="{StaticResource NavBtn}" Tag="&#xE74D;" Content="Limpeza"/>
-              <Button x:Name="HomeNavGuard" Style="{StaticResource NavBtn}" Tag="&#xEA18;" Content="Proteção"/>
               <Button x:Name="HomeNavWin" Style="{StaticResource NavBtn}" Tag="&#xE895;" Content="Windows Update"/>
+              <Button x:Name="HomeNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
+              <Button x:Name="HomeNavGuard" Style="{StaticResource NavBtn}" Tag="&#xEA18;" Content="Proteção"/>
+              <Button x:Name="HomeNavClean" Style="{StaticResource NavBtn}" Tag="&#xE74D;" Content="Limpeza"/>
               <Button x:Name="BtnHomeConfig" Style="{StaticResource NavBtn}" Tag="&#xE713;" Content="Configurações"/>
             </StackPanel>
           </DockPanel>
@@ -1449,10 +1449,10 @@ $MainXaml = @'
             <Button x:Name="BtnBack" Style="{StaticResource NavBtn}" Tag="&#xE80F;" Content="Início"/>
             <ToggleButton x:Name="NavDrivers" Style="{StaticResource Nav}" Tag="&#xE896;" Content="Drivers" IsChecked="True"/>
             <ToggleButton x:Name="NavVideo" Style="{StaticResource Nav}" Tag="&#xE7F4;" Content="Meus drivers"/>
-            <ToggleButton x:Name="NavSystem" Style="{StaticResource Nav}" Tag="&#xE946;" Content="Sistema"/>
-            <ToggleButton x:Name="NavClean" Style="{StaticResource Nav}" Tag="&#xE74D;" Content="Limpeza"/>
-            <ToggleButton x:Name="NavGuard" Style="{StaticResource Nav}" Tag="&#xEA18;" Content="Proteção"/>
             <ToggleButton x:Name="NavWin" Style="{StaticResource Nav}" Tag="&#xE895;" Content="Windows Update"/>
+            <ToggleButton x:Name="NavSystem" Style="{StaticResource Nav}" Tag="&#xE946;" Content="Sistema"/>
+            <ToggleButton x:Name="NavGuard" Style="{StaticResource Nav}" Tag="&#xEA18;" Content="Proteção"/>
+            <ToggleButton x:Name="NavClean" Style="{StaticResource Nav}" Tag="&#xE74D;" Content="Limpeza"/>
             <Button x:Name="BtnAdvConfig" Style="{StaticResource NavBtn}" Tag="&#xE713;" Content="Configurações"/>
 
           </StackPanel>
@@ -1767,10 +1767,10 @@ $MainXaml = @'
             <Button x:Name="BtnConfigHome" Style="{StaticResource NavBtn}" Tag="&#xE80F;" Content="Início"/>
             <Button x:Name="ConfigNavDrivers" Style="{StaticResource NavBtn}" Tag="&#xE896;" Content="Drivers"/>
             <Button x:Name="ConfigNavVideo" Style="{StaticResource NavBtn}" Tag="&#xE7F4;" Content="Meus drivers"/>
-            <Button x:Name="ConfigNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
-            <Button x:Name="ConfigNavClean" Style="{StaticResource NavBtn}" Tag="&#xE74D;" Content="Limpeza"/>
-            <Button x:Name="ConfigNavGuard" Style="{StaticResource NavBtn}" Tag="&#xEA18;" Content="Proteção"/>
             <Button x:Name="ConfigNavWin" Style="{StaticResource NavBtn}" Tag="&#xE895;" Content="Windows Update"/>
+            <Button x:Name="ConfigNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
+            <Button x:Name="ConfigNavGuard" Style="{StaticResource NavBtn}" Tag="&#xEA18;" Content="Proteção"/>
+            <Button x:Name="ConfigNavClean" Style="{StaticResource NavBtn}" Tag="&#xE74D;" Content="Limpeza"/>
             <ToggleButton x:Name="ConfigNavSettings" Style="{StaticResource Nav}" Tag="&#xE713;" Content="Configurações" IsChecked="True"/>
           </StackPanel>
         </DockPanel>
