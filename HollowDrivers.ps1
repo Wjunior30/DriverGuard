@@ -1,6 +1,6 @@
 ﻿param([switch]$SelfTest, [switch]$Watch, [switch]$Rescue, [switch]$AutoRescue, [switch]$HoldWU)
 
-$AppVersion = '1.3.5'
+$AppVersion = '1.3.6'
 $UpdateRepo = 'Wjunior30/DriverGuard'   # onde as versões novas são publicadas (GitHub Releases)
 # Chave pública das versões. Uma atualização só é aceita se vier assinada pela chave privada correspondente,
 # que fica fora do GitHub (%USERPROFILE%\.HollowDrivers). Assim, quem invadir a conta do GitHub não consegue publicar malware.
@@ -1340,13 +1340,25 @@ $MainXaml = @'
         </RadialGradientBrush>
       </Grid.Background>
       <DockPanel>
-        <Border x:Name="HomeRail" DockPanel.Dock="Left" Width="200" Background="#12151B" BorderBrush="{StaticResource Stroke}" BorderThickness="0,0,1,0">
-          <StackPanel x:Name="HomeRailBox" Margin="14,22,14,14">
-            <Button x:Name="BtnRailHome" Style="{StaticResource NavBtn}" Tag="&#xE700;" Content="Recolher menu" Margin="0,0,0,6" HorizontalAlignment="Left"/>
-            <Button x:Name="BtnHomeScan" Style="{StaticResource NavBtn}" Tag="&#xE721;" Content="Analisar"/>
-            <Button x:Name="BtnHomeConfig" Style="{StaticResource NavBtn}" Tag="&#xE713;" Content="Configurações"/>
-            <Button x:Name="BtnAdvanced" Style="{StaticResource NavBtn}" Tag="&#xE8A9;" Content="Config. avançada"/>
-          </StackPanel>
+        <Border x:Name="HomeRail" DockPanel.Dock="Left" Width="228" Background="#12151B" BorderBrush="{StaticResource Stroke}" BorderThickness="0,0,1,0">
+          <DockPanel x:Name="HomeRailBox" Margin="14,18,14,14">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="10,0,0,24">
+              <TextBlock FontFamily="{StaticResource Icons}" Text="&#xEA18;" FontSize="17" Foreground="__ICON__" VerticalAlignment="Center" Margin="0,2,9,0"/>
+              <TextBlock x:Name="HomeLogoText" Text="HollowDrivers" FontSize="16" FontWeight="SemiBold" FontFamily="{StaticResource Display}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <Button x:Name="BtnRailHome" DockPanel.Dock="Top" Style="{StaticResource NavBtn}" Tag="&#xE700;" Content="Recolher menu" Margin="0,0,0,6" HorizontalAlignment="Left"/>
+            <Button x:Name="BtnHomeScan" DockPanel.Dock="Bottom" Style="{StaticResource NavBtn}" Tag="&#xE721;" Content="Analisar agora"/>
+            <StackPanel>
+              <ToggleButton x:Name="HomeNavHome" Style="{StaticResource Nav}" Tag="&#xE80F;" Content="Início" IsChecked="True"/>
+              <Button x:Name="BtnAdvanced" Style="{StaticResource NavBtn}" Tag="&#xE896;" Content="Drivers"/>
+              <Button x:Name="HomeNavVideo" Style="{StaticResource NavBtn}" Tag="&#xE7F4;" Content="Meus drivers"/>
+              <Button x:Name="HomeNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
+              <Button x:Name="HomeNavClean" Style="{StaticResource NavBtn}" Tag="&#xE74D;" Content="Limpeza"/>
+              <Button x:Name="HomeNavGuard" Style="{StaticResource NavBtn}" Tag="&#xEA18;" Content="Proteção"/>
+              <Button x:Name="HomeNavWin" Style="{StaticResource NavBtn}" Tag="&#xE895;" Content="Windows Update"/>
+              <Button x:Name="BtnHomeConfig" Style="{StaticResource NavBtn}" Tag="&#xE713;" Content="Configurações"/>
+            </StackPanel>
+          </DockPanel>
         </Border>
         <Grid DockPanel.Dock="Bottom" Margin="28,0,28,16">
           <TextBlock x:Name="FooterText" Foreground="{StaticResource Dim}" FontSize="12" VerticalAlignment="Center"/>
@@ -1433,14 +1445,15 @@ $MainXaml = @'
             <TextBlock x:Name="AdvLogoText" Text="HollowDrivers" FontSize="16" FontWeight="SemiBold" FontFamily="{StaticResource Display}" VerticalAlignment="Center"/>
           </StackPanel>
           <Button x:Name="BtnRailAdv" DockPanel.Dock="Top" Style="{StaticResource NavBtn}" Tag="&#xE700;" Content="Recolher menu" Margin="0,0,0,6" HorizontalAlignment="Left"/>
-          <Button x:Name="BtnBack" DockPanel.Dock="Bottom" Style="{StaticResource NavBtn}" Tag="&#xE72B;" Content="Voltar ao início"/>
           <StackPanel>
+            <Button x:Name="BtnBack" Style="{StaticResource NavBtn}" Tag="&#xE80F;" Content="Início"/>
             <ToggleButton x:Name="NavDrivers" Style="{StaticResource Nav}" Tag="&#xE896;" Content="Drivers" IsChecked="True"/>
             <ToggleButton x:Name="NavVideo" Style="{StaticResource Nav}" Tag="&#xE7F4;" Content="Meus drivers"/>
             <ToggleButton x:Name="NavSystem" Style="{StaticResource Nav}" Tag="&#xE946;" Content="Sistema"/>
             <ToggleButton x:Name="NavClean" Style="{StaticResource Nav}" Tag="&#xE74D;" Content="Limpeza"/>
             <ToggleButton x:Name="NavGuard" Style="{StaticResource Nav}" Tag="&#xEA18;" Content="Proteção"/>
             <ToggleButton x:Name="NavWin" Style="{StaticResource Nav}" Tag="&#xE895;" Content="Windows Update"/>
+            <Button x:Name="BtnAdvConfig" Style="{StaticResource NavBtn}" Tag="&#xE713;" Content="Configurações"/>
 
           </StackPanel>
         </DockPanel>
@@ -1750,8 +1763,8 @@ $MainXaml = @'
             <TextBlock x:Name="ConfigLogoText" Text="HollowDrivers" FontSize="16" FontWeight="SemiBold" FontFamily="{StaticResource Display}" VerticalAlignment="Center"/>
           </StackPanel>
           <Button x:Name="BtnRailConfig" DockPanel.Dock="Top" Style="{StaticResource NavBtn}" Tag="&#xE700;" Content="Recolher menu" Margin="0,0,0,6" HorizontalAlignment="Left"/>
-          <Button x:Name="BtnConfigHome" DockPanel.Dock="Bottom" Style="{StaticResource NavBtn}" Tag="&#xE72B;" Content="Voltar ao início"/>
           <StackPanel>
+            <Button x:Name="BtnConfigHome" Style="{StaticResource NavBtn}" Tag="&#xE80F;" Content="Início"/>
             <Button x:Name="ConfigNavDrivers" Style="{StaticResource NavBtn}" Tag="&#xE896;" Content="Drivers"/>
             <Button x:Name="ConfigNavVideo" Style="{StaticResource NavBtn}" Tag="&#xE7F4;" Content="Meus drivers"/>
             <Button x:Name="ConfigNavSystem" Style="{StaticResource NavBtn}" Tag="&#xE946;" Content="Sistema"/>
@@ -1869,7 +1882,7 @@ $script:Win = [Windows.Markup.XamlReader]::Parse((Use-Theme $MainXaml))
 $Win = $script:Win
 foreach ($n in 'HomeView', 'AdvView', 'BtnAdvanced', 'BtnHomeScan', 'BtnHomeConfig', 'FooterText', 'BigBtn', 'Spinner', 'SpinRot', 'BigIcon', 'BigLabel', 'VerdictBadge',
     'VerdictIcon', 'VerdictText', 'VerdictSub', 'Findings', 'BtnBack', 'GpuText', 'HealthText', 'BtnScan', 'BtnUpd', 'BtnGood',
-    'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnEnable', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
+    'HomeLogoText', 'HomeNavHome', 'HomeNavVideo', 'HomeNavSystem', 'HomeNavClean', 'HomeNavGuard', 'HomeNavWin', 'BtnAdvConfig', 'BtnRestore', 'BtnPoint', 'BtnAll', 'BtnHist', 'BtnEnable', 'BtnCrash', 'BtnWu', 'BtnSites', 'BtnCsv', 'BtnWatch', 'BtnDb', 'SitesPopup',
     'SitesList', 'SearchBox', 'ChkMs', 'DriverGrid', 'StatusText', 'EmptyText', 'GuardText',
     'NavDrivers', 'NavVideo', 'NavSystem', 'NavClean', 'NavGuard', 'NavWin', 'ConfigCol', 'ConfigRailBox', 'ConfigLogoText', 'BtnRailConfig', 'BtnConfigHome', 'ConfigNavDrivers', 'ConfigNavVideo', 'ConfigNavSystem', 'ConfigNavClean', 'ConfigNavGuard', 'ConfigNavWin', 'ConfigNavSettings', 'PanClean', 'CleanDrive', 'CleanSummary', 'CleanGrid', 'CleanStatus', 'BtnCleanScan', 'BtnCleanRun', 'BtnCleanWindows', 'BtnCleanSense', 'PanWin', 'ConfigView', 'BtnConfigClose', 'WuText', 'SrText', 'BtnWuHold', 'BtnWuKeep', 'BtnWuDrv', 'BtnSrPoint', 'BtnSrOpen', 'StorageText', 'BtnCleanup', 'BtnStorageSense', 'AdvCol', 'AdvLogoText', 'HomeRail', 'HomeRailBox', 'AdvRailBox', 'BtnRailHome', 'BtnRailAdv', 'ConfigThemes', 'ConfigUpd', 'BtnAppCheck', 'BtnAppInstall', 'SysText',
     'KeyCards', 'KeyCoverage', 'KeyResumo', 'BtnKeyAll', 'KeyGrid', 'BtnRescue', 'PanDrivers', 'PanVideo', 'PanSystem', 'PanGuard',
@@ -2754,7 +2767,7 @@ function Show-Section([string]$key) {
 }
 
 $script:RailOpen = $true
-$RailItems = 'BtnHomeScan', 'BtnHomeConfig', 'BtnAdvanced', 'BtnRailHome', 'BtnRailAdv', 'NavDrivers', 'NavVideo', 'NavSystem', 'NavClean', 'NavGuard', 'NavWin', 'ConfigCol', 'ConfigRailBox', 'ConfigLogoText', 'BtnRailConfig', 'BtnConfigHome', 'ConfigNavDrivers', 'ConfigNavVideo', 'ConfigNavSystem', 'ConfigNavClean', 'ConfigNavGuard', 'ConfigNavWin', 'ConfigNavSettings', 'BtnBack', 'BtnRailConfig', 'BtnConfigHome', 'ConfigNavDrivers', 'ConfigNavVideo', 'ConfigNavSystem', 'ConfigNavClean', 'ConfigNavGuard', 'ConfigNavWin', 'ConfigNavSettings'
+$RailItems = 'BtnHomeScan', 'BtnHomeConfig', 'BtnAdvanced', 'BtnRailHome', 'HomeNavHome', 'HomeNavVideo', 'HomeNavSystem', 'HomeNavClean', 'HomeNavGuard', 'HomeNavWin', 'BtnRailAdv', 'BtnBack', 'NavDrivers', 'NavVideo', 'NavSystem', 'NavClean', 'NavGuard', 'NavWin', 'BtnAdvConfig', 'BtnRailConfig', 'BtnConfigHome', 'ConfigNavDrivers', 'ConfigNavVideo', 'ConfigNavSystem', 'ConfigNavClean', 'ConfigNavGuard', 'ConfigNavWin', 'ConfigNavSettings'
 $RailText = @{}
 function Set-Rail([bool]$open) {
     $script:RailOpen = $open
@@ -2764,13 +2777,14 @@ function Set-Rail([bool]$open) {
         $b.Content = $(if ($open) { $RailText[$n] } else { '' })
         $b.ToolTip = $(if ($open) { $null } else { $RailText[$n] })
     }
-    $HomeRail.Width = $(if ($open) { 200 } else { 64 })
+    $HomeRail.Width = $(if ($open) { 228 } else { 64 })
     $AdvCol.Width = $(if ($open) { 228 } else { 64 })
     $ConfigCol.Width = $(if ($open) { 228 } else { 64 })
-    $HomeRailBox.Margin = $(if ($open) { '14,22,14,14' } else { '6,22,6,14' })
+    $HomeRailBox.Margin = $(if ($open) { '14,18,14,14' } else { '6,18,6,14' })
     $AdvRailBox.Margin = $(if ($open) { '14,18,14,14' } else { '6,18,6,14' })
     $ConfigRailBox.Margin = $(if ($open) { '14,18,14,14' } else { '6,18,6,14' })
     $AdvLogoText.Visibility = $(if ($open) { 'Visible' } else { 'Collapsed' })
+    $HomeLogoText.Visibility = $AdvLogoText.Visibility
     $ConfigLogoText.Visibility = $AdvLogoText.Visibility
     $BtnRailHome.ToolTip = $BtnRailAdv.ToolTip = $(if ($open) { $null } else { 'Expandir menu' })
     $BtnRailConfig.ToolTip = $BtnRailHome.ToolTip
@@ -3799,9 +3813,16 @@ function Act-RemoveDb {
 # ---------------------------------------------------------------- eventos
 
 $BigBtn.add_Click({ Start-Scan })
-$BtnAdvanced.add_Click({ Show-View $true })
+$BtnAdvanced.add_Click({ Show-View $true; Show-Section 'drivers' })
 $BtnHomeScan.add_Click({ Start-Scan })
+$HomeNavHome.add_Click({ $HomeNavHome.IsChecked = $true })
 $BtnHomeConfig.add_Click({ Show-Config $true })
+$HomeNavVideo.add_Click({ Show-View $true; Show-Section 'video' })
+$HomeNavSystem.add_Click({ Show-View $true; Show-Section 'sistema'; Update-StorageInfo })
+$HomeNavClean.add_Click({ Show-View $true; Show-Section 'limpeza'; Update-CleanDrive; if (-not $CleanGrid.ItemsSource) { Start-CleanScan } })
+$HomeNavGuard.add_Click({ Show-View $true; Show-Section 'protecao' })
+$HomeNavWin.add_Click({ Show-View $true; Show-Section 'windows'; Start-WuCheck })
+$BtnAdvConfig.add_Click({ Show-Config $true })
 
 $BtnBack.add_Click({ Show-View $false })
 $BtnScan.add_Click({ Start-Scan })
@@ -3833,6 +3854,7 @@ $NavWin.add_Click({ Show-Section 'windows'; Start-WuCheck })
 $BtnConfigClose.add_Click({ Show-Config $false })
 $BtnRailConfig.add_Click({ Set-Rail (-not $script:RailOpen) })
 $BtnConfigHome.add_Click({ Show-View $false })
+$ConfigNavSettings.add_Click({ $ConfigNavSettings.IsChecked = $true })
 $ConfigNavDrivers.add_Click({ Show-View $true; Show-Section 'drivers' })
 $ConfigNavVideo.add_Click({ Show-View $true; Show-Section 'video' })
 $ConfigNavSystem.add_Click({ Show-View $true; Show-Section 'sistema'; Update-StorageInfo })
